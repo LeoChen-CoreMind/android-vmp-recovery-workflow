@@ -26,6 +26,12 @@ const CONFIG = {
     manualLoaderSignature: null,
     exactDumpInstructionMask: null,
     exactDumpInstructionValue: null,
+    dumpOnManualLoaderReturn: false,
+    dumpWhenRuntimePointersReady: false,
+    runtimePointerPollIntervalMs: 5,
+    runtimePointerPollTimeoutMs: 30000,
+    requiredNonZeroPointerOffsets: [],
+    requiredPointersInsideImage: true,
 
     // Private soinfo layout used by this 360 build.
     soinfoLoadStartOffset: null,
@@ -37,7 +43,6 @@ const CONFIG = {
     soinfoNameOffset: null,
 
     maxDumpSize: 512 * 1024 * 1024,
-    dumpIfAlreadyLoaded: true
 };
 
 // The runner injects case-specific values before this script is evaluated.
@@ -55,6 +60,7 @@ let dumping = false;
 let dumped = false;
 let lastManualHandle = null;
 let installTimer = null;
+let runtimePointerTimer = null;
 
 function log(message) {
     console.log('[360-linker-dump] ' + message);
@@ -400,6 +406,73 @@ function inspectDynamicTable(soinfo, elf) {
     return result;
 }
 
+function inspectRequiredRuntimePointers(soinfo) {
+    const result = {};
+    const offsets = CONFIG.requiredNonZeroPointerOffsets || [];
+    for (let i = 0; i < offsets.length; i++) {
+        const offset = typeof offsets[i] === 'string' ? parseInt(offsets[i], 0) : offsets[i];
+        if (!Number.isSafeInteger(offset) || offset < 0 || offset + Process.pointerSize > soinfo.loadSize) {
+            throw new Error('invalid required runtime pointer offset: ' + offsets[i]);
+        }
+        const value = soinfo.loadStart.add(offset).readPointer();
+        result['0x' + offset.toString(16)] = value.toString();
+        if (value.isNull()) {
+            throw new Error('required runtime pointer is null at private image +0x' + offset.toString(16));
+        }
+        if (CONFIG.requiredPointersInsideImage && !pointerInside(value, soinfo.loadStart, soinfo.loadSize)) {
+            throw new Error('required runtime pointer is outside private image at +0x' +
+                offset.toString(16) + ': ' + value);
+        }
+    }
+    return result;
+}
+
+function describeRuntimePointerOwners(runtimePointers) {
+    const owners = {};
+    Object.keys(runtimePointers).forEach(function (offset) {
+        const value = ptr(runtimePointers[offset]);
+        let module = null;
+        try {
+            module = Process.findModuleByAddress(value);
+        } catch (_) {
+            module = null;
+        }
+        owners[offset] = module === null ? null : {
+            name: module.name,
+            base: module.base.toString(),
+            size: module.size
+        };
+    });
+    return owners;
+}
+
+function waitForRequiredRuntimePointers(handle) {
+    if (runtimePointerTimer !== null || dumped || dumping) return;
+    const started = Date.now();
+    log('waiting for required private-linker runtime pointers');
+    runtimePointerTimer = setInterval(function () {
+        if (dumped || dumping) {
+            clearInterval(runtimePointerTimer);
+            runtimePointerTimer = null;
+            return;
+        }
+        try {
+            const soinfo = getSoinfo(handle);
+            inspectRequiredRuntimePointers(soinfo);
+            clearInterval(runtimePointerTimer);
+            runtimePointerTimer = null;
+            dumpPrivateSoinfo(handle, 'spawn-gated-runtime-pointers-ready');
+        } catch (e) {
+            if (Date.now() - started >= CONFIG.runtimePointerPollTimeoutMs) {
+                clearInterval(runtimePointerTimer);
+                runtimePointerTimer = null;
+                warn('runtime pointer wait timed out: ' + e);
+                send({ event: 'dump-failed', reason: 'runtime-pointer-timeout', error: String(e) });
+            }
+        }
+    }, CONFIG.runtimePointerPollIntervalMs);
+}
+
 function buildDynamicOverlay(soinfo, elf, dynamic) {
     if (dynamic.byteSize < 16) throw new Error('private dynamic table has no DT_NULL terminator');
     const offset = elf.dynamicVaddr - elf.minVaddr;
@@ -578,7 +651,20 @@ function dumpPrivateSoinfo(handle, reason) {
             warn('ELF header is intentionally absent; rebuilding it from private soinfo phdr=' +
                 soinfo.phdr + ', phnum=' + soinfo.phnum);
         } else {
-            elf = parseElf64(elfBase);
+            try {
+                elf = parseElf64(elfBase);
+            } catch (e) {
+                // Some builds leave an ELF magic/header decoy in the mapping
+                // while the authoritative program headers live only in the
+                // private soinfo. Fail over to those headers, then synthesize
+                // the output header exactly as for a headerless mapping.
+                warn('mapped ELF program headers are invalid (' + e +
+                    '); rebuilding from private soinfo phdr=' + soinfo.phdr);
+                syntheticHeader = true;
+                elfBase = soinfo.loadStart;
+                elf = parseProgramHeaders(soinfo.phdr, 56, soinfo.phnum);
+                elf.phoff = 64;
+            }
         }
 
         const headerOffset = pointerDelta(elfBase, soinfo.loadStart);
@@ -601,6 +687,8 @@ function dumpPrivateSoinfo(handle, reason) {
         if (!dynamic.hasHash && !dynamic.hasGnuHash) {
             throw new Error('both DT_HASH and DT_GNU_HASH are missing');
         }
+        const runtimePointers = inspectRequiredRuntimePointers(soinfo);
+        const runtimePointerOwners = describeRuntimePointerOwners(runtimePointers);
         const dynamicOverlay = buildDynamicOverlay(soinfo, elf, dynamic);
 
         const targetName = sanitizeName(soinfo.name || 'linker.so');
@@ -637,7 +725,7 @@ function dumpPrivateSoinfo(handle, reason) {
 
         const metadata = {
             reason: reason,
-            jiaguTiming: 'case-configured exact point before target JNI_OnLoad lookup/call',
+        jiaguTiming: reason,
             privateSoinfo: handle.toString(),
             targetName: soinfo.name,
             loadStart: soinfo.loadStart.toString(),
@@ -653,7 +741,9 @@ function dumpPrivateSoinfo(handle, reason) {
             readableBytes: stats.readableBytes,
             zeroFilledBytes: stats.zeroBytes,
             elf: elf,
-            dynamic: dynamic
+            dynamic: dynamic,
+            runtimePointers: runtimePointers,
+            runtimePointerOwners: runtimePointerOwners
         };
         writeMetadata(output.path, metadata);
 
@@ -663,6 +753,7 @@ function dumpPrivateSoinfo(handle, reason) {
         send({ event: 'dumped', path: output.path, loadStart: soinfo.loadStart.toString(), name: soinfo.name, syntheticHeader: syntheticHeader, symbols: dynamic.symbolCount });
     } catch (e) {
         warn('dump failed: ' + e.stack);
+        send({ event: 'dump-failed', reason: reason, error: e.stack || String(e) });
     } finally {
         dumping = false;
     }
@@ -682,7 +773,16 @@ function hookManualLoader(module) {
                 // Clone its numeric value before this callback returns.
                 lastManualHandle = ptr(retval.toString());
                 log('private linker returned soinfo=' + lastManualHandle +
-                    ' (captured; waiting for exact dump point)');
+                    (CONFIG.dumpOnManualLoaderReturn ? ' (dumping at loader return)' :
+                        ' (captured; waiting for exact dump point)'));
+                if (CONFIG.dumpOnManualLoaderReturn) {
+                    // The manual loader has completed and the caller has not yet
+                    // begun target symbol lookup/JNI_OnLoad. All private metadata
+                    // gates still run inside dumpPrivateSoinfo().
+                    dumpPrivateSoinfo(lastManualHandle, 'manual-loader-return-before-target-symbol-lookup');
+                } else if (CONFIG.dumpWhenRuntimePointersReady) {
+                    waitForRequiredRuntimePointers(lastManualHandle);
+                }
             }
         }
     });
@@ -746,21 +846,6 @@ function hookExactDumpPoint(module) {
     });
 }
 
-function tryLateDump(module) {
-    if (!CONFIG.dumpIfAlreadyLoaded || dumped || dumping) return;
-    try {
-        const handle = module.base.add(CONFIG.handleGlobalOffset).readPointer();
-        if (!handle.isNull()) {
-            const soinfo = getSoinfo(handle);
-            if (searchElfHeader(soinfo) !== null) {
-                warn('target was already loaded before the hook; dumping immediately, but spawn mode is safer');
-                dumpPrivateSoinfo(handle, 'late attach fallback');
-            }
-        }
-    } catch (_) {
-    }
-}
-
 function installForModule(module) {
     if (installed) return;
     installed = true;
@@ -772,8 +857,13 @@ function installForModule(module) {
     log('using ' + module.name + ' @ ' + module.base + ', size=0x' + module.size.toString(16));
     try {
         hookManualLoader(module);
-        hookExactDumpPoint(module);
-        tryLateDump(module);
+        if (CONFIG.exactDumpOffset !== null && CONFIG.exactDumpOffset !== undefined) {
+            hookExactDumpPoint(module);
+        } else if (CONFIG.dumpOnManualLoaderReturn || CONFIG.dumpWhenRuntimePointersReady) {
+            log('exact dump hook omitted; current-build evidence selected a spawn-gated manual-loader checkpoint');
+        } else {
+            throw new Error('no exact dump point and manual-loader-return dumping is disabled');
+        }
     } catch (e) {
         installed = false;
         warn('hook installation failed: ' + e.stack);
@@ -842,12 +932,15 @@ function main() {
     }
 
     const required = [
-        'manualLoadFunctionOffset', 'exactDumpOffset', 'handleGlobalOffset',
-        'manualLoaderSignature', 'exactDumpInstructionMask', 'exactDumpInstructionValue',
+        'manualLoadFunctionOffset', 'manualLoaderSignature',
         'soinfoLoadStartOffset', 'soinfoPhdrOffset', 'soinfoLoadSizeOffset',
         'soinfoPhnumOffset', 'soinfoDynamicOffset', 'soinfoLoadBiasOffset',
         'soinfoNameOffset'
     ];
+    if (!CONFIG.dumpOnManualLoaderReturn && !CONFIG.dumpWhenRuntimePointersReady) {
+        required.push('exactDumpOffset', 'handleGlobalOffset',
+            'exactDumpInstructionMask', 'exactDumpInstructionValue');
+    }
     const missing = required.filter(name => CONFIG[name] === null || CONFIG[name] === undefined);
     if (missing.length !== 0 || !Array.isArray(CONFIG.manualLoaderSignature) || CONFIG.manualLoaderSignature.length === 0) {
         warn('case-specific dump configuration is incomplete: ' + missing.join(', '));

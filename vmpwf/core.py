@@ -147,7 +147,8 @@ def run_command(command: list[str], cwd: Path | None = None, timeout: int = 120,
                   subprocess.list2cmdline(command)]
     try:
         completed = subprocess.run(actual, cwd=str(cwd) if cwd else None,
-                                   capture_output=True, text=True, timeout=timeout,
+                                   capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", timeout=timeout,
                                    env=env)
         return {"command": command, "returncode": completed.returncode,
                 "stdout": completed.stdout[-20000:], "stderr": completed.stderr[-20000:]}

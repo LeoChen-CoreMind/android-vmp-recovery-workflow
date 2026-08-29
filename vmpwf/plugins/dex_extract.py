@@ -48,6 +48,13 @@ class DexExtract(BasePlugin):
                 evidence, ["dex_dir", "dex_zip"]))
         dex_paths = [item["path"] for item in selected]
         summaries = [{"path": path, **lm_summary(Path(path))} for path in dex_paths]
+        if not context.profile.get("fixture") and not any(
+                isinstance(item.get("method_records"), int) and item["method_records"] > 0
+                for item in summaries):
+            raise StageBlocked(context.question(
+                self.id,
+                "No recoverable VMP method records were found; provide a matching runtime DEX",
+                [json.dumps(summaries, ensure_ascii=False)], ["dex_dir", "dex_zip"]))
         context.case["dex_inputs"] = dex_paths
         context.case["vmp_inventory"] = summaries
         context.save_case()

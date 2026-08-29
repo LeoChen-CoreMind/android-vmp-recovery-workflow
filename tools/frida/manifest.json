@@ -1,0 +1,8 @@
+{
+  "name": "media-server",
+  "frida_version": "17.9.1",
+  "sha256": "129278B9DCC817B20BED6B0BBC91208435D19D284401B841E70C17659B15D5B3",
+  "size": 53070760,
+  "remote_path": "/data/local/tmp/media-server",
+  "source": "user-supplied-equal-length-renamed-frida-server"
+}

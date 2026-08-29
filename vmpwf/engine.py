@@ -120,19 +120,24 @@ def resume_case(context: Context, question_id: str, answer_path: Path) -> dict[s
         raise ValueError("answer must be a JSON object")
     allowed = {"commands", "ida", "simulation", "artifacts", "profile", "device_serial", "dex_inputs",
                "dex_dir", "dex_zip", "apk", "tools", "command_timeout", "target_confirmed",
-               "execute_device", "so_dump_config"}
+               "execute_device", "so_dump_config", "invalidate_from"}
     unknown = sorted(set(answer) - allowed)
     if unknown:
         raise ValueError(f"answer contains immutable or unknown fields: {unknown}")
-    for key, value in answer.items():
+    answer_values = dict(answer)
+    invalidation_stage = answer_values.pop("invalidate_from", question["stage"])
+    if invalidation_stage not in STAGES:
+        raise ValueError(f"invalid invalidate_from stage: {invalidation_stage}")
+    if STAGES.index(invalidation_stage) > STAGES.index(question["stage"]):
+        raise ValueError("invalidate_from cannot skip ahead of the blocked stage")
+    for key, value in answer_values.items():
         if key in {"commands", "ida", "simulation", "artifacts", "tools"} and isinstance(value, dict):
             context.case.setdefault(key, {}).update(value)
         else:
             context.case[key] = value
     context.case["config_revision"] = context.revision + 1
     question["status"] = "answered"; question["answer"] = answer; question["answered_at"] = now()
-    atomic_json(context.case_dir / "questions.json", questions)
-    stage = question["stage"]
+    stage = invalidation_stage
     invalidated = []
     for affected in [stage, *DOWNSTREAM.get(stage, [])]:
         previous = context.case.get("stage_records", {}).pop(affected, None)
@@ -141,6 +146,13 @@ def resume_case(context: Context, question_id: str, answer_path: Path) -> dict[s
                 **previous, "invalidated_at": now(), "invalidated_by": question_id,
             })
             invalidated.append(affected)
+    affected_questions = {stage, *DOWNSTREAM.get(stage, [])}
+    for item in questions:
+        if item is not question and item.get("status") == "open" and item.get("stage") in affected_questions:
+            item["status"] = "superseded"
+            item["superseded_by"] = question_id
+            item["superseded_at"] = now()
+    atomic_json(context.case_dir / "questions.json", questions)
     context.case["open_questions"] = [item["id"] for item in questions if item.get("status") == "open"]
     context.case["state"] = "INIT"
     for completed_stage in STAGES:
@@ -154,7 +166,8 @@ def resume_case(context: Context, question_id: str, answer_path: Path) -> dict[s
         "invalidated_stages": invalidated, "updated_at": now(),
     })
     append_event(context.case_dir, {"type": "config-updated", "question_id": question_id,
-                                    "stage": stage, "config_revision": context.revision,
+                                    "stage": stage, "blocked_stage": question["stage"],
+                                    "config_revision": context.revision,
                                     "invalidated_stages": invalidated})
     return context.case
 

@@ -9,7 +9,11 @@
     "image_base": "0x0"
   },
   "tools": {
-    "sofixer": null
+    "sofixer": null,
+    "frida_server": "tools/frida/media-server",
+    "frida_server_remote": "/data/local/tmp/media-server",
+    "frida_server_version": "17.9.1",
+    "frida_server_sha256": "129278B9DCC817B20BED6B0BBC91208435D19D284401B841E70C17659B15D5B3"
   },
   "commands": {}
 }

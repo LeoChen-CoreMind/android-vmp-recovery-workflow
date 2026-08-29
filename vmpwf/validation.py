@@ -131,13 +131,72 @@ def inspect_elf(path: Path) -> dict:
     elf_class = data[4]
     if elf_class == 2:
         phoff, phentsize, phnum = struct.unpack_from("<Q", data, 32)[0], struct.unpack_from("<H", data, 54)[0], struct.unpack_from("<H", data, 56)[0]
+        shoff, shentsize, shnum = struct.unpack_from("<Q", data, 40)[0], struct.unpack_from("<H", data, 58)[0], struct.unpack_from("<H", data, 60)[0]
     elif elf_class == 1:
         phoff, phentsize, phnum = struct.unpack_from("<I", data, 28)[0], struct.unpack_from("<H", data, 42)[0], struct.unpack_from("<H", data, 44)[0]
+        shoff, shentsize, shnum = struct.unpack_from("<I", data, 32)[0], struct.unpack_from("<H", data, 46)[0], struct.unpack_from("<H", data, 48)[0]
     else:
         return {"ok": False, "reason": "unsupported ELF class"}
     if not phentsize or phoff + phentsize * phnum > len(data):
         return {"ok": False, "reason": "program headers out of range"}
-    types = [struct.unpack_from("<I", data, phoff + index * phentsize)[0] for index in range(phnum)]
+    segments = []
+    for index in range(phnum):
+        offset = phoff + index * phentsize
+        segment_type = struct.unpack_from("<I", data, offset)[0]
+        if elf_class == 2:
+            file_offset, vaddr = struct.unpack_from("<QQ", data, offset + 8)
+            file_size, memory_size = struct.unpack_from("<QQ", data, offset + 32)
+        else:
+            file_offset, vaddr = struct.unpack_from("<II", data, offset + 4)
+            file_size, memory_size = struct.unpack_from("<II", data, offset + 16)
+        segments.append({"type": segment_type, "offset": file_offset, "vaddr": vaddr,
+                         "filesz": file_size, "memsz": memory_size})
+
+    def virtual_to_file(address: int) -> int | None:
+        for segment in segments:
+            if (segment["type"] == 1 and segment["vaddr"] <= address
+                    < segment["vaddr"] + segment["filesz"]):
+                return segment["offset"] + address - segment["vaddr"]
+        return None
+
+    dynamic_tags: dict[int, int] = {}
+    dynamic_segment = next((item for item in segments if item["type"] == 2), None)
+    if dynamic_segment and dynamic_segment["offset"] < len(data):
+        entry_size = 16 if elf_class == 2 else 8
+        end = min(len(data), dynamic_segment["offset"] + dynamic_segment["filesz"])
+        cursor = dynamic_segment["offset"]
+        while cursor + entry_size <= end:
+            tag, value = struct.unpack_from("<QQ" if elf_class == 2 else "<II", data, cursor)
+            cursor += entry_size
+            if tag == 0:
+                break
+            dynamic_tags[int(tag)] = int(value)
+
+    symbol_count = None
+    sysv_hash = dynamic_tags.get(4)
+    if sysv_hash is not None:
+        hash_offset = virtual_to_file(sysv_hash)
+        if hash_offset is not None and hash_offset + 8 <= len(data):
+            symbol_count = struct.unpack_from("<I", data, hash_offset + 4)[0]
+    if symbol_count is None and shoff and shentsize and shoff + shentsize * shnum <= len(data):
+        for index in range(shnum):
+            offset = shoff + index * shentsize
+            section_type = struct.unpack_from("<I", data, offset + 4)[0]
+            if section_type != 11:  # SHT_DYNSYM
+                continue
+            if elf_class == 2:
+                size, entry_size = struct.unpack_from("<Q", data, offset + 32)[0], struct.unpack_from("<Q", data, offset + 56)[0]
+            else:
+                size, entry_size = struct.unpack_from("<I", data, offset + 20)[0], struct.unpack_from("<I", data, offset + 36)[0]
+            if entry_size:
+                symbol_count = size // entry_size
+                break
+
+    types = [item["type"] for item in segments]
+    required_dynamic = {5: "strtab", 6: "symtab", 10: "strsz", 11: "syment"}
+    missing_dynamic = [name for tag, name in required_dynamic.items() if tag not in dynamic_tags]
     return {"ok": 1 in types, "class": 64 if elf_class == 2 else 32,
             "machine": struct.unpack_from("<H", data, 18)[0], "phnum": phnum,
-            "pt_load": types.count(1), "pt_dynamic": types.count(2)}
+            "pt_load": types.count(1), "pt_dynamic": types.count(2),
+            "dynamic_missing": missing_dynamic, "has_sysv_hash": 4 in dynamic_tags,
+            "has_gnu_hash": 0x6FFFFEF5 in dynamic_tags, "symbol_count": symbol_count}

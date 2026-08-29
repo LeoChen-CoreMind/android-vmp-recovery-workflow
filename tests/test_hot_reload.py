@@ -37,3 +37,20 @@ def test_hot_reload_preserves_artifact_ledger_and_stage_history(tmp_path, sample
     assert (case_dir / "reports/rev-0002/validation.json").is_file()
     ida_revisions = {item["config_revision"] for item in after if item["stage"] == "ida-export"}
     assert ida_revisions == {1, 2}
+
+
+def test_resume_can_invalidate_from_an_upstream_stage(tmp_path, sample_inputs):
+    apk, dex_zip = sample_inputs
+    case_dir = tmp_path / "case"
+    init_case(case_dir, "com.example.fixture", None, [], str(apk), "offline-fixture", dex_zip=str(dex_zip))
+    run_workflow(load_context(case_dir))
+    context = load_context(case_dir)
+    question = context.question("ida-export", "SO timing was too early", [], ["so_dump_config"])
+    answer = case_dir / "answer.json"
+    answer.write_text(json.dumps({"invalidate_from": "so-dump"}), encoding="utf-8")
+    resumed = resume_case(load_context(case_dir), question["id"], answer)
+    assert resumed["state"] == "TARGET_CONFIRMED"
+    assert "so-dump" not in resumed["stage_records"]
+    assert "ida-export" not in resumed["stage_records"]
+    stored = json.loads((case_dir / "questions.json").read_text(encoding="utf-8"))
+    assert stored[-1]["answer"]["invalidate_from"] == "so-dump"

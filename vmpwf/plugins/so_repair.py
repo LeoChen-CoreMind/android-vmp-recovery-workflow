@@ -20,6 +20,7 @@ class SoRepair(BasePlugin):
             raise StageBlocked(context.question(self.id, "No SO dump is available", ["dump/so/raw"]))
         output = context.revision_dir("fix/so")
         artifacts = []
+        commands = []
         for source in sources:
             target = output / (source.stem + "_fixed.so")
             if context.profile.get("fixture"):
@@ -32,11 +33,28 @@ class SoRepair(BasePlugin):
                 result = run_command([tool, "-s", str(source), "-o", str(target)], context.case_dir, timeout=300)
                 if result["returncode"]:
                     raise StageBlocked(context.question(self.id, "SoFixer failed", [result["stderr"]]))
+                commands.append(result)
                 mode = "sofixer"
             validation = inspect_elf(target)
             if not validation.get("ok"):
                 raise StageBlocked(context.question(self.id, "Repaired SO failed ELF validation", [str(target)]))
+            if not context.profile.get("fixture"):
+                errors = []
+                if validation.get("machine") != 183:
+                    errors.append("ELF machine is not AArch64")
+                if validation.get("pt_dynamic", 0) <= 0:
+                    errors.append("PT_DYNAMIC is missing")
+                if validation.get("dynamic_missing"):
+                    errors.append("missing dynamic tags: " + ", ".join(validation["dynamic_missing"]))
+                if not validation.get("has_sysv_hash") and not validation.get("has_gnu_hash"):
+                    errors.append("dynamic hash table is missing")
+                if not isinstance(validation.get("symbol_count"), int) or validation["symbol_count"] <= 0:
+                    errors.append("dynamic symbol count is unavailable")
+                if errors:
+                    raise StageBlocked(context.question(
+                        self.id, "Repaired SO failed dynamic symbol validation", [str(target), *errors]))
             artifacts.append(file_record(target, context.case_dir, source=mode, elf=validation))
         context.case.setdefault("artifacts", {})["so_fixed"] = [item["path"] for item in artifacts]
         context.save_case()
-        return {"ok": True, "source": "fixture" if context.profile.get("fixture") else "sofixer", "artifacts": artifacts}
+        return {"ok": True, "source": "fixture" if context.profile.get("fixture") else "sofixer",
+                "commands": commands, "artifacts": artifacts}

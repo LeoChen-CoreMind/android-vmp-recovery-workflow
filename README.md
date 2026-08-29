@@ -53,4 +53,4 @@ py -3 -m pip install -e .
 py -3 -m pytest -q
 ```
 
-External tools such as SoFixer, Frida, Java/JADX, dexdump, and IDA are configured locally and are not stored in the repository.
+SoFixer, Java/JADX, dexdump, and IDA remain locally configured external tools. The user-supplied, hash-pinned Frida 17.9.1 `media-server` is stored under `tools/frida/` because device preparation is part of the reproducible anti-debug workflow; its manifest records the expected size, SHA-256, version, and remote path.
