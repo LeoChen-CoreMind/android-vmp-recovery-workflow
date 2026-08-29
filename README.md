@@ -20,6 +20,74 @@ Native confirmation is implemented by `scripts/simulation/run_native_confirmatio
 
 Runtime SO recovery has one supported entrypoint: `scripts/dump/so/run_gating.py` loads `scripts/dump/so/dump_linker.js` with case-specific offsets. A simple post-`dlopen` dump of the outer `libjiagu` mapping is not accepted as the private linker because it lacks the private `soinfo` evidence, synthetic ELF reconstruction, and decrypted dynamic-table overlay required by later IDA analysis.
 
+## Local AI Operator Prompt
+
+The repository-only Chinese prompt is stored at `prompts/local_autonomous_operator_zh.md`. It is not installed into the global Codex Skill. For a new task, replace the paths in the following short launcher and give it to the AI; the referenced prompt contains the complete evidence, blocking, and author-question rules.
+
+```text
+请读取并严格执行：
+C:\Users\Rabe\Desktop\360\vmp-recovery-workflow\prompts\local_autonomous_operator_zh.md
+
+框架目录：
+C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
+
+本次输入：
+- APK：C:\path\target.apk
+- DEX ZIP：C:\path\runtime-dex.zip（没有则写 null）
+- DEX 目录：null
+- 设备序列号：null
+- 已有案件目录：null
+
+请全程在本地使用 `vmpwf`、ADB/root、IDA Pro MCP 和 Unicorn 自动执行。所有结论必须有命令输出、日志、反汇编、JSON 或 SHA-256 证据。遇到框架缺陷、未知偏移、多个候选、证据冲突或需要作者选择时，立即按提示词规定的 BLOCKED 格式向我/框架作者提问；不要猜测，不要套用其他 APP 或 fixture 的参数。
+```
+
+Input variants:
+
+```text
+APK only: set DEX ZIP and DEX directory to null. The workflow tries static extraction first.
+APK + DEX ZIP: provide the runtime dump ZIP as fallback/real DEX input.
+APK + DEX directory: provide the directory containing classes*.dex.
+Resume a case: set the existing case directory and keep the original APK/DEX paths for provenance checks.
+```
+
+The full prompt explicitly authorizes local device/tool operation but forbids uploading customer artifacts. It also requires the AI to stop and ask the author whenever case-specific facts cannot be derived from evidence. Do not replace those questions with guessed offsets, handler meanings, widths, opcodes, or method records.
+
+## Hot Update Prompt And Skill
+
+The workflow already implements resumable hot updates at stage boundaries:
+
+- `vmpwf resume` applies a structured answer to an open question.
+- `config_revision` increments on every accepted update.
+- The selected stage and its downstream dependents are invalidated automatically.
+- Previous stage records move to `stage_history`.
+- Old revision artifacts and event history remain available.
+- Configuration is not reloaded inside a running Frida hook or Unicorn execution.
+
+Repository-only hot-update resources:
+
+```text
+Prompt: prompts/hot_update_operator_zh.md
+Skill source: skills/android-vmp-workflow-hot-update/SKILL.md
+```
+
+These resources are not installed by `install-global`. Use the hot-update prompt when a case is `BLOCKED`, when an author supplies corrected offsets/configuration, or after a tested framework patch.
+
+Quick launcher:
+
+```text
+请读取并严格执行：
+C:\Users\Rabe\Desktop\360\vmp-recovery-workflow\prompts\hot_update_operator_zh.md
+
+框架目录：
+C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
+
+案件目录：C:\Users\Rabe\Desktop\360\vmp-recovery-workflow\cases\<package>\<case-id>
+问题 ID：q-xxxx
+作者提供的新信息：<配置 JSON、offset、DEX 路径、IDA response 或补丁说明>
+
+只允许在阶段边界通过 `vmpwf resume` 应用更新。请验证 revision、stage_history、下游失效和旧产物保留。任何不能由当前案件证据唯一确定的值，都必须向我/框架作者提问，不得猜测。
+```
+
 ## Case layout
 
 Cases are created under `cases/<package>/<case-id>/` with `input`, `dump/so`, `dump/dex`, `fix/so`, `fix/dex`, `ida`, `simulation`, `reports`, and `logs` directories. `case.json`, `checkpoint.json`, `questions.json`, `events.jsonl`, and `artifacts.json` hold state and provenance.
