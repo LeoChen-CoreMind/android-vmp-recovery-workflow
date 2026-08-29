@@ -12,6 +12,8 @@ APK ingest -> DEX static extraction/user fallback -> target confirmation
 
 The bundled static extractor is an unchanged compatibility script. User/runtime DEX input remains classified as unrepaired until a real customer-specific IDA/simulation/restore chain proves otherwise.
 
+A valid DEX set with zero VMP method records does not block target confirmation, SO dump/repair, or IDA capability validation. The workflow records that inventory and pauses at `vm-static`, where method streams are actually required.
+
 The first device profile is ARM64-only. It rejects a 32-bit target before loading the ARM64 Frida or Unicorn components. SO layout offsets, IDA root/helper RVAs, and native simulation addresses are case configuration, never reusable defaults.
 
 Native confirmation is implemented by `scripts/simulation/run_native_confirmation.py`. Set `simulation.outer`, `simulation.linker`, `simulation.binary`, and `simulation.config` in the case; the `native-sim` plugin invokes the runner automatically and writes a hash-bound `native_simulation.json` report.
@@ -45,6 +47,8 @@ py -3 .\vmpwf.py install-global
 `resume` applies the answer, increments `config_revision`, archives invalidated stage records, and immediately continues from the first affected checkpoint. `artifacts.json` is append-only across revisions.
 
 Real final validation fails closed unless Android SDK `dexdump` and Java-backed JADX accept every restored DEX. `doctor` resolves tools from `PATH` and automatically discovers the newest installed Android SDK Build Tools when `dexdump` is not on `PATH`. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
+
+Repeatability requires identical customer inputs and restored DEX hashes. Runtime SO, IDA, and simulation intermediates are reported separately because ASLR-sensitive addresses and their bound hashes may vary between otherwise equivalent device launches.
 
 ## Development
 

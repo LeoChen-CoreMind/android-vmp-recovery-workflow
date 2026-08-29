@@ -48,21 +48,25 @@ class DexExtract(BasePlugin):
                 evidence, ["dex_dir", "dex_zip"]))
         dex_paths = [item["path"] for item in selected]
         summaries = [{"path": path, **lm_summary(Path(path))} for path in dex_paths]
-        if not context.profile.get("fixture") and not any(
-                isinstance(item.get("method_records"), int) and item["method_records"] > 0
-                for item in summaries):
-            raise StageBlocked(context.question(
-                self.id,
-                "No recoverable VMP method records were found; provide a matching runtime DEX",
-                [json.dumps(summaries, ensure_ascii=False)], ["dex_dir", "dex_zip"]))
+        recoverable_records = sum(
+            item.get("method_records", 0)
+            for item in summaries
+            if isinstance(item.get("method_records"), int) and item["method_records"] > 0
+        )
         context.case["dex_inputs"] = dex_paths
         context.case["vmp_inventory"] = summaries
+        context.case["vmp_recovery_required"] = recoverable_records > 0
+        context.case["vmp_method_records"] = recoverable_records
         context.save_case()
         manifest = {"static": {"returncode": static_result["returncode"], "outputs": static_outputs,
                                "stderr": static_result.get("stderr", "")[-4000:]},
                     "selected_source": "user-supplied" if imported else "static-extractor",
-                    "outputs": selected, "vmp": summaries}
+                    "outputs": selected, "vmp": summaries,
+                    "vmp_recovery_required": recoverable_records > 0,
+                    "vmp_method_records": recoverable_records}
         manifest_path = context.revision_dir("dump/dex/records") / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return {"ok": True, "source": manifest["selected_source"], "dexes": selected,
-                "vmp": summaries, "artifacts": [*selected, file_record(manifest_path, context.case_dir)]}
+                "vmp": summaries, "vmp_recovery_required": recoverable_records > 0,
+                "vmp_method_records": recoverable_records,
+                "artifacts": [*selected, file_record(manifest_path, context.case_dir)]}
