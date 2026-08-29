@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -13,6 +12,7 @@ from .core import StageBlocked, install_skill, read_json
 from .engine import (init_case, load_context, resume_case, run_workflow,
                      validate_case, workflow_plan)
 from .models import STAGES
+from .tooling import resolve_tool
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -59,7 +59,8 @@ def doctor() -> dict:
         REPO_ROOT / "scripts/dump/dex/extract_360_dex.py", REPO_ROOT / "skill/SKILL.md",
         REPO_ROOT / "scripts/simulation/run_native_confirmation.py",
     ]
-    tools = {name: shutil.which(name) for name in ("adb", "frida", "jadx", "dexdump", "codex", "git", "gh")}
+    tools = {name: resolve_tool(name) for name in
+             ("adb", "frida", "java", "jadx", "dexdump", "codex", "git", "gh")}
     modules = {name: importlib.util.find_spec(name) is not None
                for name in ("frida", "unicorn", "capstone", "jsonschema")}
     return {"status": "ok" if all(path.is_file() for path in required) else "error",
@@ -67,7 +68,7 @@ def doctor() -> dict:
             "tools": tools, "python_modules": modules,
             "device_execution_ready": bool(tools["adb"] and modules["frida"]),
             "native_simulation_ready": bool(modules["unicorn"] and modules["capstone"]),
-            "real_dex_validation_ready": bool(tools["jadx"] and tools["dexdump"])}
+            "real_dex_validation_ready": bool(tools["java"] and tools["jadx"] and tools["dexdump"])}
 
 
 def _summary(case: dict) -> dict:

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 from ..core import StageBlocked, run_command
 from ..provenance import file_record
+from ..tooling import resolve_tool
 from ..validation import lm_summary, valid_dex_file
 from .common import BasePlugin
 
@@ -30,9 +30,10 @@ class IndependentValidate(BasePlugin):
             if not restore_result.get("vmp_repaired"):
                 raise StageBlocked(context.question(self.id, "DEX restoration was not proven", ["dex-restore"]))
             configured_tools = {**context.profile.get("tools", {}), **context.case.get("tools", {})}
-            jadx = configured_tools.get("jadx") or shutil.which("jadx")
-            dexdump = configured_tools.get("dexdump") or shutil.which("dexdump")
-            missing = [name for name, value in (("jadx", jadx), ("dexdump", dexdump)) if not value]
+            java = resolve_tool("java", configured_tools.get("java"))
+            jadx = resolve_tool("jadx", configured_tools.get("jadx"))
+            dexdump = resolve_tool("dexdump", configured_tools.get("dexdump"))
+            missing = [name for name, value in (("java", java), ("jadx", jadx), ("dexdump", dexdump)) if not value]
             if missing:
                 raise StageBlocked(context.question(
                     self.id, "Independent validation tools are unavailable",
@@ -48,8 +49,8 @@ class IndependentValidate(BasePlugin):
                         self.id, "dexdump or JADX rejected a restored DEX",
                         [dump_result["stderr"], jadx_result["stderr"], dex]))
         report = {"status": "ok", "files": files, "tools": {
-            "jadx": shutil.which("jadx"), "dexdump": shutil.which("dexdump"),
-            "codex": shutil.which("codex")},
+            "java": resolve_tool("java"), "jadx": resolve_tool("jadx"),
+            "dexdump": resolve_tool("dexdump"), "codex": resolve_tool("codex")},
             "vmp_repair_claimed": bool(restore_result.get("vmp_repaired")),
             "fixture_pass_through": fixture,
             "validation_scope": "orchestration-only" if fixture else "restored-dex",

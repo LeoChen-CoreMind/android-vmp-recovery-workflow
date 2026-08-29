@@ -42,7 +42,7 @@ py -3 .\vmpwf.py install-global
 
 `resume` applies the answer, increments `config_revision`, archives invalidated stage records, and immediately continues from the first affected checkpoint. `artifacts.json` is append-only across revisions.
 
-Real final validation fails closed unless both `dexdump` and JADX accept every restored DEX. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
+Real final validation fails closed unless Android SDK `dexdump` and Java-backed JADX accept every restored DEX. `doctor` resolves tools from `PATH` and automatically discovers the newest installed Android SDK Build Tools when `dexdump` is not on `PATH`. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
 
 ## Development
 
@@ -51,4 +51,4 @@ py -3 -m pip install -e .
 py -3 -m pytest -q
 ```
 
-External tools such as SoFixer, Frida, JADX, dexdump, and IDA are configured locally and are not stored in the repository.
+External tools such as SoFixer, Frida, Java/JADX, dexdump, and IDA are configured locally and are not stored in the repository.
