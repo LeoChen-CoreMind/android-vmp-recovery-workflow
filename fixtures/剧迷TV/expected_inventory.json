@@ -1,0 +1,11 @@
+{
+  "package": "com.jumi.tv",
+  "apk_size": 22245776,
+  "apk_sha256": "0f7ac03603adf3603fc4855644523ef158a46b83c849a5575c07bd1fe4d6cf1b",
+  "root_dex": {
+    "name": "classes.dex",
+    "size": 5371076,
+    "sha256": "497d9b4e531b6e0b4e7ef921e0869c75da7a4f0db7c0abc54291b5214ae79138"
+  },
+  "jiagu_assets": ["assets/libjiagu.so", "assets/libjiagu_x86.so"]
+}

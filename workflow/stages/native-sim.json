@@ -1,0 +1,1 @@
+{"id":"native-sim","plugin":"NativeSim","inputs":["vm_streams","so_fixed","case-specific simulation config"],"outputs":["simulation"],"gate":"confirmed=true, unknown external calls equal zero, and no invalid memory/abort/stack failure"}

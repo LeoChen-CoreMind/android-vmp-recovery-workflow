@@ -1,0 +1,1 @@
+{"id":"apk-ingest","plugin":"ApkIngest","inputs":["apk"],"outputs":["apk_inventory"],"gate":"package and APK hash recorded"}

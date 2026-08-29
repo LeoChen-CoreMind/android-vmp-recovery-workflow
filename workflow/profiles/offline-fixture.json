@@ -1,0 +1,19 @@
+{
+  "id": "offline-fixture",
+  "fixture": true,
+  "architecture": "AArch64",
+  "static_extract_timeout": 60,
+  "ida": {
+    "adapter": "fixture",
+    "fixture": "fixtures/com.jumi.tv/handler_map.json",
+    "provenance": "reference-com.tencent.dt"
+  },
+  "vm": {
+    "streams_fixture": "fixtures/com.jumi.tv/vm_streams_enriched.json",
+    "provenance": "reference-com.tencent.dt"
+  },
+  "simulation": {
+    "fixture": "fixtures/com.jumi.tv/native_simulation_reference.json",
+    "provenance": "reference-com.tencent.dt"
+  }
+}

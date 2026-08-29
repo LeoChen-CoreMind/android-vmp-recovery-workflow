@@ -1,0 +1,6 @@
+{
+  "handler_map.json": "Reference workflow evidence from the existing com.tencent.dt recovery case; not valid semantics for com.jumi.tv.",
+  "vm_streams_enriched.json": "Reference workflow evidence from the existing com.tencent.dt recovery case; not a repaired stream for com.jumi.tv.",
+  "native_simulation_reference.json": "Actual Unicorn execution result from the existing com.tencent.dt ARM64 recovery case; not evidence for com.jumi.tv.",
+  "purpose": "Offline orchestration and JSON-contract regression only"
+}

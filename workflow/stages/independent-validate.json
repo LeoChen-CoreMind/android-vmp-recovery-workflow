@@ -1,0 +1,1 @@
+{"id":"independent-validate","plugin":"IndependentValidate","inputs":["restored_dex"],"outputs":["validation_report"],"gate":"real restoration requires valid DEX checksum plus successful dexdump and JADX; fixture scope is orchestration-only"}

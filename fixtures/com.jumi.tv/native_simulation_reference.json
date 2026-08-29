@@ -1,0 +1,26 @@
+{
+  "confirmed": true,
+  "engine": "unicorn-arm64",
+  "request_count": 8,
+  "streams_sha256": "6971a5a6e41a489ed74947fa64833060c4439e281d2729c2b864dc6d12ce5d87",
+  "binary_sha256": "eafe8b5127d4ae5aedbdf0202b0280fb626e64c03d749a1465257b24c44bb6ef",
+  "outer_sha256": "a02efa577217db5ea00b78f069e75d0a0a560288c6200bb35db042fc762654df",
+  "linker_sha256": "eafe8b5127d4ae5aedbdf0202b0280fb626e64c03d749a1465257b24c44bb6ef",
+  "config_sha256": "c17b4c45d3c5a30228eb5b498011e95a3873fe1ab6463560d91d557c175bef52",
+  "unknown_external_calls": 0,
+  "invalid_memory": [],
+  "abort": false,
+  "stack_guard_failed": false,
+  "cross_method_constants_consistent": true,
+  "results": [
+    {"method_idx": 2352, "pc": 63, "key": 98, "raw_unit": 35975, "expected_decoded_unit": 65530, "actual_decoded_unit": 65530, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 2352, "pc": 124, "key": 98, "raw_unit": 35877, "expected_decoded_unit": 65309, "actual_decoded_unit": 65309, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 2352, "pc": 162, "key": 98, "raw_unit": 35847, "expected_decoded_unit": 65402, "actual_decoded_unit": 65402, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 3518, "pc": 154, "key": 118, "raw_unit": 33829, "expected_decoded_unit": 65309, "actual_decoded_unit": 65309, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 3518, "pc": 178, "key": 118, "raw_unit": 33799, "expected_decoded_unit": 65402, "actual_decoded_unit": 65402, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 3518, "pc": 245, "key": 118, "raw_unit": 33914, "expected_decoded_unit": 65525, "actual_decoded_unit": 65525, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 3518, "pc": 333, "key": 118, "raw_unit": 33802, "expected_decoded_unit": 65280, "actual_decoded_unit": 65280, "matched": true, "interpreter_entry_rva": "162cc"},
+    {"method_idx": 3518, "pc": 422, "key": 118, "raw_unit": 18401, "expected_decoded_unit": 16220, "actual_decoded_unit": 16220, "matched": true, "interpreter_entry_rva": "162cc"}
+  ],
+  "errors": []
+}

@@ -1,0 +1,16 @@
+{
+  "id": "android-vmp-recovery",
+  "version": 1,
+  "stages": [
+    "apk-ingest",
+    "dex-extract",
+    "target-confirm",
+    "so-dump",
+    "so-repair",
+    "ida-export",
+    "vm-static",
+    "native-sim",
+    "dex-restore",
+    "independent-validate"
+  ]
+}

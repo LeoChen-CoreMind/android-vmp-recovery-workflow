@@ -1,0 +1,10 @@
+{
+  "source": "runtime-dump-unrepaired",
+  "dexes": [
+    {"name": "classes1_decrypted.dex", "size": 7615560, "sha256": "54dd21d2ef4c68106a019e797ab24a611225c7b4b6e0b46f216f86a33b851d53", "vmp_method_records": 17},
+    {"name": "classes2_decrypted.dex", "size": 1956808, "sha256": "ad0151e0d485ad7db9d6d7b1a02f15a2d709ebba50692bc32ab2b606eebfa421", "vmp_method_records": 6},
+    {"name": "classes3_decrypted.dex", "size": 93504, "sha256": "d8d5ad7fcccdd0519cae24b483c40693cfb1ba1231d4163ff16fce9f8211b5fc", "vmp_method_records": 0}
+  ],
+  "total_vmp_method_records": 23,
+  "vmp_repaired": false
+}

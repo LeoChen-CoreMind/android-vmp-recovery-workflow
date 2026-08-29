@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "interpreter_wrap_rva", "program_base_rva", "program_entry",
+    "program_global_rva", "outer_rela_rva", "outer_rela_size",
+    "relative_relocation_type", "dynstr_rva", "dynstr_size",
+    "symtab_rva", "symtab_size", "symtab_entry_size",
+    "plt_rela_rva", "plt_rela_size", "plt_stub_rva",
+    "got_base_rva", "plt_stub_size", "got_slot_size"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "interpreter_wrap_rva": {"type": ["integer", "string"]},
+    "program_base_rva": {"type": ["integer", "string"]},
+    "program_entry": {"type": ["integer", "string"]},
+    "program_global_rva": {"type": ["integer", "string"]},
+    "outer_rela_rva": {"type": ["integer", "string"]},
+    "outer_rela_size": {"type": ["integer", "string"]},
+    "relative_relocation_type": {"type": ["integer", "string"]},
+    "dynstr_rva": {"type": ["integer", "string"]},
+    "dynstr_size": {"type": ["integer", "string"]},
+    "symtab_rva": {"type": ["integer", "string"]},
+    "symtab_size": {"type": ["integer", "string"]},
+    "symtab_entry_size": {"type": ["integer", "string"]},
+    "plt_rela_rva": {"type": ["integer", "string"]},
+    "plt_rela_size": {"type": ["integer", "string"]},
+    "plt_stub_rva": {"type": ["integer", "string"]},
+    "got_base_rva": {"type": ["integer", "string"]},
+    "plt_stub_size": {"type": ["integer", "string"]},
+    "got_slot_size": {"type": ["integer", "string"]},
+    "max_instruction_count": {"type": ["integer", "string"]}
+  }
+}

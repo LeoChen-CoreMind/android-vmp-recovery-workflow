@@ -1,65 +1,22 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
-STAGES = [
-    "target-confirm",
-    "so-dump",
-    "so-repair",
-    "ida-export",
-    "vm-static",
-    "native-sim",
-    "dex-restore",
-    "independent-validate",
-]
-STAGE_STATES = [
-    "INIT", "TARGET_CONFIRMED", "SO_DUMPED", "SO_REPAIRED",
-    "IDA_EXTRACTED", "SIMULATION_CONFIRMED", "DEX_RESTORED", "VALIDATED",
-    "BLOCKED",
-]
-STAGE_SUCCESS = {
-    "target-confirm": "TARGET_CONFIRMED", "so-dump": "SO_DUMPED",
-    "so-repair": "SO_REPAIRED", "ida-export": "IDA_EXTRACTED",
-    "vm-static": "IDA_EXTRACTED", "native-sim": "SIMULATION_CONFIRMED",
-    "dex-restore": "DEX_RESTORED", "independent-validate": "VALIDATED",
-}
-DOWNSTREAM = {stage: STAGES[index + 1:] for index, stage in enumerate(STAGES)}
+from .hot_reload import load_workflow
+from .models import CASE_DIRS
+from .provenance import file_record, sha256_file
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def file_record(path: Path, root: Path | None = None) -> dict[str, Any]:
-    path = path.resolve()
-    record: dict[str, Any] = {
-        "path": str(path), "size": path.stat().st_size,
-        "sha256": sha256_file(path),
-    }
-    if root is not None:
-        try:
-            record["relative"] = str(path.relative_to(root.resolve()))
-        except ValueError:
-            record["relative"] = None
-    return record
 
 
 def atomic_json(path: Path, value: Any) -> None:
@@ -101,11 +58,47 @@ class Context:
     case_dir: Path
     case: dict[str, Any]
     execute_device: bool = False
+    profile_snapshot: dict[str, Any] | None = field(default=None, repr=False)
+    workflow_hash: str | None = field(default=None, repr=False)
+
+    @property
+    def repo_root(self) -> Path:
+        return Path(__file__).resolve().parent.parent
+
+    @property
+    def revision(self) -> int:
+        return int(self.case.get("config_revision", 1))
+
+    @property
+    def profile(self) -> dict[str, Any]:
+        if self.profile_snapshot is not None:
+            return self.profile_snapshot
+        _, profile, _ = load_workflow(self.repo_root, self.case.get("profile", "android-arm64-360-dexvmp"))
+        return profile
+
+    def reload(self) -> None:
+        current = read_json(self.case_dir / "case.json")
+        if current:
+            self.case = current
+
+    def reload_boundary(self) -> tuple[dict[str, Any], dict[str, Any], str]:
+        """Reload case/workflow configuration exactly once at a stage boundary."""
+        self.reload()
+        workflow, profile, workflow_hash = load_workflow(
+            self.repo_root, self.case.get("profile", "android-arm64-360-dexvmp")
+        )
+        self.profile_snapshot = profile
+        self.workflow_hash = workflow_hash
+        return workflow, profile, workflow_hash
 
     @property
     def artifacts_dir(self) -> Path:
-        value = self.case.get("artifacts_dir", "artifacts")
-        path = self.case_dir / value
+        path = self.case_dir
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def revision_dir(self, relative: str) -> Path:
+        path = self.case_dir / relative / f"rev-{self.revision:04d}"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -115,6 +108,11 @@ class Context:
     def question(self, stage: str, message: str, evidence: list[str] | None = None,
                  fields: list[str] | None = None, severity: str = "error") -> dict[str, Any]:
         questions = read_json(self.case_dir / "questions.json", []) or []
+        existing = next((item for item in questions
+                         if item.get("stage") == stage and item.get("message") == message
+                         and item.get("status") == "open"), None)
+        if existing:
+            return existing
         question = {
             "id": f"q-{len(questions) + 1:04d}", "stage": stage,
             "severity": severity, "message": message,
@@ -143,8 +141,12 @@ class StageBlocked(RuntimeError):
 
 def run_command(command: list[str], cwd: Path | None = None, timeout: int = 120,
                 env: dict[str, str] | None = None) -> dict[str, Any]:
+    actual = command
+    if os.name == "nt" and command and Path(command[0]).suffix.lower() in {".cmd", ".bat"}:
+        actual = [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c",
+                  subprocess.list2cmdline(command)]
     try:
-        completed = subprocess.run(command, cwd=str(cwd) if cwd else None,
+        completed = subprocess.run(actual, cwd=str(cwd) if cwd else None,
                                    capture_output=True, text=True, timeout=timeout,
                                    env=env)
         return {"command": command, "returncode": completed.returncode,
@@ -154,6 +156,8 @@ def run_command(command: list[str], cwd: Path | None = None, timeout: int = 120,
     except subprocess.TimeoutExpired as exc:
         return {"command": command, "returncode": 124,
                 "stdout": (exc.stdout or "")[-20000:], "stderr": "timeout"}
+    except OSError as exc:
+        return {"command": command, "returncode": 126, "stdout": "", "stderr": str(exc)}
 
 
 def validate_files(source: dict[str, Any], keys: list[str]) -> dict[str, Any]:
@@ -182,3 +186,9 @@ def install_skill() -> Path:
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
     return destination
+
+
+def create_case_layout(case_dir: Path) -> None:
+    case_dir.mkdir(parents=True, exist_ok=True)
+    for relative in CASE_DIRS:
+        (case_dir / relative).mkdir(parents=True, exist_ok=True)

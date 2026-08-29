@@ -1,0 +1,1 @@
+{"id":"ida-export","plugin":"IdaExport","inputs":["so_fixed"],"outputs":["ida_table"],"gate":"IDA JSON contract valid"}

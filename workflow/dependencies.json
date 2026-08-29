@@ -1,0 +1,12 @@
+{
+  "apk-ingest": [],
+  "dex-extract": ["apk-ingest"],
+  "target-confirm": ["dex-extract"],
+  "so-dump": ["target-confirm"],
+  "so-repair": ["so-dump"],
+  "ida-export": ["so-repair"],
+  "vm-static": ["ida-export", "dex-extract"],
+  "native-sim": ["vm-static"],
+  "dex-restore": ["native-sim"],
+  "independent-validate": ["dex-restore"]
+}

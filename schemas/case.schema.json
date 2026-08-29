@@ -1,16 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["schema_version", "case_id", "package", "dex_inputs", "profile", "config_revision", "state"],
+  "required": ["schema_version", "case_id", "package", "apk", "profile", "config_revision", "state"],
   "properties": {
-    "schema_version": {"type": "integer", "const": 1},
+    "schema_version": {"type": "integer", "const": 2},
     "case_id": {"type": "string", "minLength": 1},
     "package": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$"},
+    "apk": {"type": "string"},
     "device_serial": {"type": ["string", "null"]},
-    "dex_inputs": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "apk": {"type": ["string", "null"]},
+    "dex_inputs": {"type": "array", "items": {"type": "string"}},
+    "dex_dir": {"type": ["string", "null"]},
+    "dex_zip": {"type": ["string", "null"]},
     "profile": {"type": "string"},
     "config_revision": {"type": "integer", "minimum": 1},
-    "state": {"enum": ["INIT", "TARGET_CONFIRMED", "SO_DUMPED", "SO_REPAIRED", "IDA_EXTRACTED", "SIMULATION_CONFIRMED", "DEX_RESTORED", "VALIDATED", "BLOCKED"]}
+    "state": {"enum": ["INIT", "APK_INGESTED", "DEX_READY", "TARGET_CONFIRMED", "SO_DUMPED", "SO_REPAIRED", "IDA_EXTRACTED", "VM_STATIC_RECOVERED", "SIMULATION_CONFIRMED", "DEX_RESTORED", "VALIDATED", "BLOCKED"]},
+    "execute_device": {"type": "boolean"},
+    "target_confirmed": {"type": "boolean"},
+    "commands": {"type": "object"},
+    "ida": {"type": "object"},
+    "simulation": {"type": "object"},
+    "tools": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "so_dump_config": {"type": "object"},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "stage_records": {"type": "object"},
+    "stage_history": {"type": "object"}
   }
 }

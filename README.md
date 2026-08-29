@@ -1,31 +1,54 @@
-# Android DexVMP Recovery Workflow
+# Android 360 DexVMP Recovery Workflow
 
-Portable orchestration for the staged Android DexVMP recovery workflow.
+`vmpwf` is a resumable APK-to-DexVMP orchestration framework. It records case provenance, runs stage plugins, preserves immutable evidence by configuration revision, and pauses with structured questions when evidence is incomplete.
 
-The repository keeps the workflow engine separate from the existing `so_dump`
-scripts. It records immutable evidence, validates stage contracts, and pauses
-on recoverable analysis failures so configuration can be updated and resumed.
+## Workflow
 
-## Quick start
-
-```powershell
-py -3 .\vmpwf.py init --case .\cases\demo `
-  --package com.example.app --device debbff75 --dex C:\path\classes3.dex
-py -3 .\vmpwf.py status --case .\cases\demo
-py -3 .\vmpwf.py run --case .\cases\demo
+```text
+APK ingest -> DEX static extraction/user fallback -> target confirmation
+-> SO dump -> SO repair -> IDA JSON export -> static VM recovery
+-> native simulation -> DEX restore -> independent validation
 ```
 
-Device actions (Frida/spawn-gating) are opt-in:
+The bundled static extractor is an unchanged compatibility script. User/runtime DEX input remains classified as unrepaired until a real customer-specific IDA/simulation/restore chain proves otherwise.
+
+The first device profile is ARM64-only. It rejects a 32-bit target before loading the ARM64 Frida or Unicorn components. SO layout offsets, IDA root/helper RVAs, and native simulation addresses are case configuration, never reusable defaults.
+
+Native confirmation is implemented by `scripts/simulation/run_native_confirmation.py`. Set `simulation.outer`, `simulation.linker`, `simulation.binary`, and `simulation.config` in the case; the `native-sim` plugin invokes the runner automatically and writes a hash-bound `native_simulation.json` report.
+
+## Case layout
+
+Cases are created under `cases/<package>/<case-id>/` with `input`, `dump/so`, `dump/dex`, `fix/so`, `fix/dex`, `ida`, `simulation`, `reports`, and `logs` directories. `case.json`, `checkpoint.json`, `questions.json`, `events.jsonl`, and `artifacts.json` hold state and provenance.
+
+## Commands
 
 ```powershell
-py -3 .\vmpwf.py run --case .\cases\demo --execute-device
-```
+py -3 .\vmpwf.py doctor
 
-Install the bundled Codex Skill globally:
+py -3 .\vmpwf.py recover `
+  --apk "C:\path\target.apk" `
+  --dex-zip "C:\path\runtime-dex.zip" `
+  --profile offline-fixture
 
-```powershell
+py -3 .\vmpwf.py run --case .\cases\com.example.app\<case-id> --execute-device
+py -3 .\vmpwf.py status --case <case-dir>
+py -3 .\vmpwf.py plan --case <case-dir>
+py -3 .\vmpwf.py validate --case <case-dir>
+py -3 .\vmpwf.py resume --case <case-dir> --question q-0001 --answer answer.json
 py -3 .\vmpwf.py install-global
 ```
 
-The engine is standard-library-only. External tools are invoked only when a
-stage is enabled and their paths are configured in `case.json`.
+`offline-fixture` validates orchestration and file contracts. Its reference IDA/VM evidence is explicitly not customer semantics. The normal `android-arm64-360-dexvmp` profile requires real device commands, customer-specific IDA output, and a real restoration result.
+
+`resume` applies the answer, increments `config_revision`, archives invalidated stage records, and immediately continues from the first affected checkpoint. `artifacts.json` is append-only across revisions.
+
+Real final validation fails closed unless both `dexdump` and JADX accept every restored DEX. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
+
+## Development
+
+```powershell
+py -3 -m pip install -e .
+py -3 -m pytest -q
+```
+
+External tools such as SoFixer, Frida, JADX, dexdump, and IDA are configured locally and are not stored in the repository.

@@ -1,0 +1,1 @@
+{"id":"so-dump","plugin":"SoDump","inputs":["target_observed"],"outputs":["so_dump"],"gate":"SO and metadata hash recorded"}

@@ -1,4 +1,4 @@
 interface:
   display_name: "Android DexVMP Recovery Workflow"
-  short_description: "Orchestrate resumable SO, VM, simulation and DEX recovery stages"
-  default_prompt: "Use $android-vmp-recovery-workflow to orchestrate an authorized Android DexVMP case with checkpoints, evidence hashes, and fail-closed validation."
+  short_description: "Run resumable APK-to-DexVMP recovery cases"
+  default_prompt: "Use $android-vmp-recovery-workflow to process this APK and optional runtime DEX through the checkpointed recovery workflow."

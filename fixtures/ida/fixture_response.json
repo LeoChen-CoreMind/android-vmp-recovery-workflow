@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "binary_sha256": null,
+  "entries": [],
+  "width_candidates": {},
+  "evidence": [{"kind": "fixture-contract"}],
+  "tool": "fixture",
+  "tool_version": "1"
+}

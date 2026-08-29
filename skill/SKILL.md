@@ -1,39 +1,29 @@
 ---
 name: android-vmp-recovery-workflow
-description: Orchestrate an authorized Android 360 DexVMP recovery case through target confirmation, SO dump/repair, IDA evidence export, static VM recovery, native simulation, user-supplied DEX restoration, and independent validation with resumable checkpoints.
+description: Run a resumable Android 360 DexVMP case from customer APK and optional runtime DEX through SO dump/repair, IDA evidence export, native confirmation, VMP restoration, and independent validation.
 metadata:
-  short-description: Run the staged Android DexVMP recovery workflow
+  short-description: Operate the APK-to-DexVMP recovery workflow
 ---
 
 # Android VMP Recovery Workflow
 
-Use the bundled `vmpwf` CLI in `vmp-recovery-workflow` for case state, stage
-contracts, provenance and resumable failures.
-
-## Required behavior
-
-- Require an explicit package and user-supplied DEX input.
-- Confirm ADB package identity, ABI, UID/root and SELinux before device stages.
-- Keep SO dump, repair, IDA export, static recovery, native simulation, DEX
-  restore and independent validation as separate checkpoints.
-- Treat `handler_map.json`, width candidates and MCP responses as evidence, not
-  as trusted final semantics.
-- Fail closed on unknown opcodes, ambiguous widths, invalid references,
-  simulator faults, checksum errors or class-data size changes.
-- On recoverable failures, write `questions.json` and `checkpoint.json`, pause,
-  and resume only after a JSON answer increments `config_revision`.
-- Preserve original artifacts and record SHA-256 for every output.
-
-## Commands
+Use the installed `vmpwf` CLI. Start with `vmpwf doctor`, then prefer:
 
 ```text
-vmpwf init --case <dir> --package <name> --dex <path>
-vmpwf run --case <dir>
-vmpwf status --case <dir>
-vmpwf resume --case <dir> --question <id> --answer <json>
-vmpwf install-global
+vmpwf recover --apk <apk> [--dex-dir <dir> | --dex-zip <zip>] --profile <profile>
 ```
 
-The DEX is supplied by the user; this workflow does not dump DEX from the
-device automatically. Existing scripts in `so_dump` are invoked through case
-command configuration and are never edited by this Skill.
+Read [references/prompts/master_operator.md](references/prompts/master_operator.md) for autonomous operation and the matching stage prompt under `references/prompts/` before resolving a blocked stage.
+
+Required invariants:
+
+- Customer/runtime DEX files are unrepaired inputs until `dex-restore` and independent validation prove otherwise.
+- Do not transfer RVAs, handler meanings, method keys, or simulator constants between APKs.
+- Keep every recovery phase as a separate checkpoint.
+- Device execution requires explicit `--execute-device`.
+- Reject a target ABI that is outside the selected profile before starting Frida or Unicorn.
+- Fixture mode validates orchestration only and preserves fixture provenance.
+- Real final validation requires restored-method coverage plus successful dexdump and JADX checks.
+- Fail closed on ambiguous dump points, IDA widths, opcodes, references, simulator calls, code-unit lengths, or DEX integrity.
+- Answer recoverable failures with `vmpwf resume`; it reloads at the stage boundary, invalidates downstream stages, and continues automatically.
+- Preserve old artifacts and SHA-256 records. Do not modify the bundled static extractor while operating a case.

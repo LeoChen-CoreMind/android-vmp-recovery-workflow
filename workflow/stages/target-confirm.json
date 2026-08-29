@@ -1,0 +1,1 @@
+{"id":"target-confirm","plugin":"TargetConfirm","inputs":["package","device_serial","profile.supported_abis"],"outputs":["target_observed"],"gate":"package, version, ABI, install path, UID and root capability confirmed"}

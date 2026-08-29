@@ -1,0 +1,1 @@
+{"id":"vm-static","plugin":"VmStatic","inputs":["ida_table","dex_inputs"],"outputs":["vm_streams"],"gate":"method streams and references close"}

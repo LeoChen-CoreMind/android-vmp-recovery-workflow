@@ -4,12 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "android-vmp-recovery-workflow"
-version = "0.1.0"
+version = "1.0.0"
 description = "Resumable Android DexVMP recovery workflow orchestrator"
 requires-python = ">=3.10"
+dependencies = ["jsonschema>=4.20"]
 
 [project.scripts]
 vmpwf = "vmpwf.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["vmpwf*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]

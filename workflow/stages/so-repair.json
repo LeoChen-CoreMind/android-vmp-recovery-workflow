@@ -1,0 +1,1 @@
+{"id":"so-repair","plugin":"SoRepair","inputs":["so_dump"],"outputs":["so_fixed"],"gate":"ELF program headers contain PT_LOAD"}

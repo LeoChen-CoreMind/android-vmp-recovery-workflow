@@ -1,0 +1,1 @@
+{"id":"dex-restore","plugin":"DexRestore","inputs":["simulation","dex_inputs"],"outputs":["restored_dex","repair_manifest"],"gate":"repair manifest covers every recorded VMP method and code-unit length/DEX integrity are preserved"}

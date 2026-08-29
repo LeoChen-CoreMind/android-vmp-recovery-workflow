@@ -1,34 +1,47 @@
 {
-  "schema_version": 1,
-  "case_id": "com.tencent.dt-2026-08-29",
-  "package": "com.tencent.dt",
-  "device_serial": "debbff75",
-  "dex_inputs": ["C:/cases/com.tencent.dt/input/classes3.dex"],
-  "apk": null,
+  "schema_version": 2,
+  "case_id": "com.example.app-20260829-120000",
+  "package": "com.example.app",
+  "device_serial": "device-serial",
+  "apk": "C:/cases/input/app.apk",
+  "dex_zip": "C:/cases/input/runtime-dex.zip",
+  "dex_dir": null,
+  "dex_inputs": [],
   "profile": "android-arm64-360-dexvmp",
   "config_revision": 1,
   "state": "INIT",
-  "target_confirmed": false,
-  "commands": {
-    "so-dump": ["py", "-3", "C:/workspace/so_dump/scripts/run_gating.py"],
-    "so-repair": ["C:/workspace/so_dump/tools/SoFixer-Windows-64.exe", "-s", "C:/cases/com.tencent.dt/artifacts/linker_dump.so", "-o", "C:/cases/com.tencent.dt/artifacts/linker_fixed.so"],
-    "vm-static": ["py", "-3", "C:/workspace/so_dump/dex vmp dump/static_vmp_probe.py", "--output", "C:/cases/com.tencent.dt/artifacts/static_probe.json"],
-    "native-sim": ["py", "-3", "C:/workspace/so_dump/dex vmp dump/unicorn_literal_decoder.py", "--key", "0x62", "--unit", "0x8c87"],
-    "dex-restore": ["py", "-3", "C:/workspace/so_dump/dex vmp dump/restore_vmp_dex.py", "--streams", "C:/cases/com.tencent.dt/artifacts/vm_streams_enriched.json", "--output-dir", "C:/cases/com.tencent.dt/recovered/dex"],
-    "independent-validate": ["py", "-3", "C:/workspace/vmp-recovery-workflow/tools/validate_outputs.py"]
+  "execute_device": false,
+  "so_dump_config": {
+    "jiaguNames": ["libjiagu_a64.so"],
+    "manualLoadFunctionOffset": null,
+    "exactDumpOffset": null,
+    "handleGlobalOffset": null,
+    "manualLoaderSignature": null,
+    "exactDumpInstructionMask": null,
+    "exactDumpInstructionValue": null,
+    "soinfoLoadStartOffset": null,
+    "soinfoPhdrOffset": null,
+    "soinfoLoadSizeOffset": null,
+    "soinfoPhnumOffset": null,
+    "soinfoDynamicOffset": null,
+    "soinfoLoadBiasOffset": null,
+    "soinfoNameOffset": null
+  },
+  "tools": {
+    "sofixer": "C:/tools/SoFixer-Windows-64.exe"
   },
   "ida": {
-    "adapter": "fixture",
-    "binary": "C:/cases/com.tencent.dt/artifacts/linker_fixed.so",
-    "fixture": "C:/workspace/so_dump/dex vmp dump/handler_map.json",
-    "output": "C:/cases/com.tencent.dt/artifacts/dispatch_map.json"
+    "adapter": "ida-mcp",
+    "root_rva": null,
+    "response": "C:/cases/ida/responses/response.json"
   },
-  "artifacts": {
-    "so_dump": ["C:/cases/com.tencent.dt/artifacts/libjiagu_dump.so", "C:/cases/com.tencent.dt/artifacts/linker_dump.so"],
-    "linker_dump": "C:/cases/com.tencent.dt/artifacts/linker_dump.so",
-    "linker_fixed": "C:/cases/com.tencent.dt/artifacts/linker_fixed.so",
-    "static_probe": "C:/cases/com.tencent.dt/artifacts/static_probe.json",
-    "vm_streams": "C:/cases/com.tencent.dt/artifacts/vm_streams_enriched.json",
-    "restored_dex": "C:/cases/com.tencent.dt/recovered/dex/classes3_unicorn_restored.dex"
-  }
+  "simulation": {
+    "outer": null,
+    "linker": null,
+    "binary": null,
+    "config": null
+  },
+  "commands": {},
+  "artifacts": {},
+  "stage_records": {}
 }
