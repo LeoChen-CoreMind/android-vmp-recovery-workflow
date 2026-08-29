@@ -44,6 +44,27 @@ def collect_diagnostics(adb: list[str], package: str, log_dir: Path | None) -> d
     return diagnostics
 
 
+def resolve_spawn_identifier(device, spawn, attempts: int = 20, delay: float = 0.01) -> str:
+    """Resolve Frida spawn events whose identifier is populated asynchronously."""
+    identifier = getattr(spawn, "identifier", "") or ""
+    if identifier:
+        return identifier
+    pid = getattr(spawn, "pid", None)
+    for attempt in range(attempts):
+        try:
+            pending_spawns = device.enumerate_pending_spawn()
+        except Exception:
+            return ""
+        for pending in pending_spawns:
+            if getattr(pending, "pid", None) == pid:
+                identifier = getattr(pending, "identifier", "") or ""
+                if identifier:
+                    return identifier
+        if attempt + 1 < attempts and delay > 0:
+            time.sleep(delay)
+    return ""
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -92,6 +113,7 @@ def main() -> int:
     done = {"value": False, "info": None, "failed": None}
     sessions = []
     agent_events = []
+    spawn_events = []
 
     def on_message(message, _data):
         if message.get("type") == "send":
@@ -108,13 +130,28 @@ def main() -> int:
             print("[JS-ERROR] " + message.get("description", "unknown"), flush=True)
 
     def on_spawn(spawn):
-        identifier = spawn.identifier or ""
+        raw_identifier = getattr(spawn, "identifier", "") or ""
+        identifier = resolve_spawn_identifier(device, spawn)
+        event = {"pid": getattr(spawn, "pid", None), "parent_pid": getattr(spawn, "parent_pid", None),
+                 "raw_identifier": raw_identifier,
+                 "resolved_identifier": identifier, "target": args.package in identifier,
+                 "attached": False, "resumed": False}
         try:
             if args.package in identifier:
                 session = device.attach(spawn.pid); sessions.append(session)
                 script = session.create_script(agent_code); script.on("message", on_message); script.load()
+                event["attached"] = True
+        except Exception as exc:
+            event["error"] = f"{type(exc).__name__}: {exc}"
+            if event["target"]:
+                done["failed"] = {"event": "spawn-attach-failed", **event}
         finally:
-            device.resume(spawn.pid)
+            try:
+                device.resume(spawn.pid)
+                event["resumed"] = True
+            except Exception as exc:
+                event["resume_error"] = f"{type(exc).__name__}: {exc}"
+            spawn_events.append(event)
 
     device.on("spawn-added", on_spawn)
     device.enable_spawn_gating()
@@ -128,6 +165,7 @@ def main() -> int:
         time.sleep(0.2)
     device.disable_spawn_gating()
     write_log(args.log_dir, "frida-agent-events.json", json.dumps(agent_events, ensure_ascii=False, indent=2))
+    write_log(args.log_dir, "spawn-events.json", json.dumps(spawn_events, ensure_ascii=False, indent=2))
     pulled = []
     if done["value"] and done["info"].get("path"):
         args.output_dir.mkdir(parents=True, exist_ok=True)

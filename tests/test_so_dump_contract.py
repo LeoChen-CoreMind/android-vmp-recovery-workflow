@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib.util
 
 from vmpwf.cli import doctor
 from vmpwf.plugins.so_dump import SoDump
@@ -41,6 +42,7 @@ def test_spawn_runner_owns_custom_server_and_diagnostics():
     profile = (root / "workflow/profiles/android-arm64-360-dexvmp.json").read_text(encoding="utf-8")
     assert "--server" in runner and "prepare_frida_server.py" in runner
     assert "enable_spawn_gating" in runner and "logcat.txt" in runner
+    assert "spawn-events.json" in runner and "resolved_identifier" in runner
     assert "dumpOnManualLoaderReturn" in agent
     assert "dumpWhenRuntimePointersReady" in agent
     assert "spawn-gated-runtime-pointers-ready" in agent
@@ -52,6 +54,45 @@ def test_spawn_runner_owns_custom_server_and_diagnostics():
     assert '"frida_server": "tools/frida/media-server"' in profile
     prepare = (root / "scripts/device/prepare_frida_server.py").read_text(encoding="utf-8")
     assert '["frida", "--version"]' in prepare
+
+
+def test_spawn_runner_resolves_empty_identifier_from_pending_spawn():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts/dump/so/run_gating.py"
+    spec = importlib.util.spec_from_file_location("run_gating", script)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    class Spawn:
+        pid = 123
+        identifier = ""
+
+    class Pending:
+        pid = 123
+        identifier = "com.example.target"
+
+    class Device:
+        def enumerate_pending_spawn(self):
+            return [Pending()]
+
+    assert module.resolve_spawn_identifier(Device(), Spawn(), attempts=1, delay=0) == "com.example.target"
+
+
+def test_frida_spawn_gating_workflow_is_documented():
+    root = Path(__file__).resolve().parents[1]
+    document = root / "docs/frida-spawn-gating-anti-debug-zh.md"
+    content = document.read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    prompt = (root / "prompts/frida-prepare.md").read_text(encoding="utf-8")
+    assert "media-server" in content
+    assert "spawn-events.json" in content
+    assert "enumerate_pending_spawn()" in content
+    assert "pre-`JNI_OnLoad`" in content
+    assert "SEGV_ACCERR" in content
+    assert "late attach" in content
+    assert document.name in readme
+    assert "docs/frida-spawn-gating-anti-debug-zh.md" in prompt
 
 
 def test_custom_server_manifest_matches_binary():

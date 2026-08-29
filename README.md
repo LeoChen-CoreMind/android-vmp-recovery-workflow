@@ -22,6 +22,8 @@ Native confirmation is implemented by `scripts/simulation/run_native_confirmatio
 
 Runtime SO recovery has one supported entrypoint: `scripts/dump/so/run_gating.py` loads `scripts/dump/so/dump_linker.js` with case-specific offsets. A simple post-`dlopen` dump of the outer `libjiagu` mapping is not accepted as the private linker because it lacks the private `soinfo` evidence, synthetic ELF reconstruction, and decrypted dynamic-table overlay required by later IDA analysis.
 
+The reproducible Frida startup and anti-detection boundary is documented in [docs/frida-spawn-gating-anti-debug-zh.md](docs/frida-spawn-gating-anti-debug-zh.md). It covers the hash-pinned renamed server, reboot redeployment, spawn-gating lifecycle, empty spawn-identifier handling, pre-`JNI_OnLoad` timing, evidence logs, and the known crash risk of inline-hooking manually mapped private code.
+
 ## Local AI Operator Prompt
 
 The repository-only Chinese prompt is stored at `prompts/local_autonomous_operator_zh.md`. It is not installed into the global Codex Skill. For a new task, replace the paths in the following short launcher and give it to the AI; the referenced prompt contains the complete evidence, blocking, and author-question rules.
