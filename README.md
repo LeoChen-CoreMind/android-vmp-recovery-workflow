@@ -2,6 +2,8 @@
 
 `vmpwf` is a resumable APK-to-DexVMP orchestration framework. It records case provenance, runs stage plugins, preserves immutable evidence by configuration revision, and pauses with structured questions when evidence is incomplete.
 
+Repository automation rules are defined in `AGENTS.md`. Codex or another coding agent entering this repository should read it before operating a case or modifying the framework.
+
 ## Workflow
 
 ```text

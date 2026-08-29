@@ -55,7 +55,8 @@ def parser() -> argparse.ArgumentParser:
 
 def doctor() -> dict:
     required = [
-        REPO_ROOT / "workflow/workflow.json", REPO_ROOT / "scripts/apk/inspect_apk.py",
+        REPO_ROOT / "AGENTS.md", REPO_ROOT / "workflow/workflow.json",
+        REPO_ROOT / "scripts/apk/inspect_apk.py",
         REPO_ROOT / "scripts/dump/dex/extract_360_dex.py", REPO_ROOT / "skill/SKILL.md",
         REPO_ROOT / "scripts/dump/so/run_gating.py", REPO_ROOT / "scripts/dump/so/dump_linker.js",
         REPO_ROOT / "scripts/device/prepare_frida_server.py", REPO_ROOT / "tools/frida/media-server",

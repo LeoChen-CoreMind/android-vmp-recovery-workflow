@@ -3,7 +3,10 @@ from vmpwf.cli import doctor, inspect_package, main
 
 def test_doctor_and_package(sample_inputs):
     apk, _ = sample_inputs
-    assert doctor()["status"] == "ok"
+    result = doctor()
+    assert result["status"] == "ok"
+    assert any(path.endswith("AGENTS.md") and present
+               for path, present in result["required_files"].items())
     assert inspect_package(apk) == "com.example.fixture"
 
 
