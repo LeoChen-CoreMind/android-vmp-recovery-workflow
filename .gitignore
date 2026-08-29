@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Case evidence and generated validation workspaces
+cases/*
+!cases/.gitkeep
+_smoke_case/
+_codex_validation/
+
+# Customer and reverse-engineering artifacts
+*.apk
+*.apks
+*.dex
+*.so
+*.elf
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.zip
+*.exe
+
+# Runtime logs and temporary outputs
+*.log
+*.tmp
+*.bak
+validated-artifacts.json

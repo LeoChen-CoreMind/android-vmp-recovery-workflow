@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["case_id", "state", "updated_at"],
+  "properties": {
+    "case_id": {"type": "string"},
+    "stage": {"type": "string"},
+    "state": {"type": "string"},
+    "config_revision": {"type": "integer", "minimum": 1},
+    "question_id": {"type": ["string", "null"]},
+    "updated_at": {"type": "string"}
+  }
+}

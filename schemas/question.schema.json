@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "stage", "severity", "message", "evidence", "expected", "status"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^q-[0-9]{4,}$"},
+    "stage": {"type": "string"},
+    "severity": {"enum": ["warning", "error"]},
+    "message": {"type": "string"},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "expected": {"type": "object"},
+    "status": {"enum": ["open", "answered", "closed"]}
+  }
+}
