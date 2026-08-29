@@ -1,1 +1,1 @@
-{"id":"so-dump","plugin":"SoDump","inputs":["target_observed"],"outputs":["so_dump"],"gate":"SO and metadata hash recorded"}
+{"id":"so-dump","plugin":"SoDump","inputs":["target_observed"],"outputs":["so_dump"],"gate":"private linker reconstructed from private soinfo; metadata and hashes recorded; outer libjiagu flat dumps are rejected"}

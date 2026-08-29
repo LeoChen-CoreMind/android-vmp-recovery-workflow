@@ -57,6 +57,7 @@ def doctor() -> dict:
     required = [
         REPO_ROOT / "workflow/workflow.json", REPO_ROOT / "scripts/apk/inspect_apk.py",
         REPO_ROOT / "scripts/dump/dex/extract_360_dex.py", REPO_ROOT / "skill/SKILL.md",
+        REPO_ROOT / "scripts/dump/so/run_gating.py", REPO_ROOT / "scripts/dump/so/dump_linker.js",
         REPO_ROOT / "scripts/simulation/run_native_confirmation.py",
     ]
     tools = {name: resolve_tool(name) for name in
