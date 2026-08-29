@@ -14,6 +14,48 @@ class DexRestore(BasePlugin):
     id = "dex-restore"
 
     def run(self, context):
+        if not context.case.get("vmp_recovery_required", True):
+            output_dir = context.revision_dir("fix/dex")
+            artifacts = []
+            for source_name in context.case.get("dex_inputs", []):
+                source = Path(source_name)
+                if not valid_dex_file(source):
+                    raise StageBlocked(context.question(self.id, "DEX input is invalid", [str(source)]))
+                target = output_dir / source.name
+                shutil.copy2(source, target)
+                artifacts.append(file_record(
+                    target,
+                    context.case_dir,
+                    source="no-vmp-pass-through",
+                    vmp_repaired=False,
+                    note="No VMP method records were present; no method bytes were modified.",
+                ))
+            if not artifacts:
+                raise StageBlocked(context.question(self.id, "No DEX inputs are available", ["dex_inputs"]))
+            manifest_path = output_dir / "vmp_restore_manifest.json"
+            manifest = {
+                "status": "not-required",
+                "reason": "no-vmp-method-records",
+                "vmp_repaired": False,
+                "restored_methods": 0,
+                "outputs": artifacts,
+            }
+            manifest_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            context.case.setdefault("artifacts", {})["restored_dex"] = [
+                item["path"] for item in artifacts
+            ]
+            context.case["artifacts"]["restore_manifest"] = str(manifest_path.resolve())
+            context.save_case()
+            return {
+                "ok": True,
+                "source": "no-vmp-pass-through",
+                "vmp_repaired": False,
+                "repair_required": False,
+                "restored_methods": 0,
+                "artifacts": [*artifacts, file_record(manifest_path, context.case_dir)],
+            }
         if context.profile.get("fixture"):
             output = context.revision_dir("fix/dex")
             artifacts = []

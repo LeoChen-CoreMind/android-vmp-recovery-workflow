@@ -43,7 +43,11 @@ class IdaExport(BasePlugin):
             raise StageBlocked(context.question(
                 self.id, "IDA response belongs to a different binary",
                 [f"expected={expected_binary_hash}", f"observed={result.get('binary_sha256')}"]))
-        checks = validate_dispatch_map(result, allow_contextual=bool(context.profile.get("fixture")))
+        checks = validate_dispatch_map(
+            result,
+            allow_contextual=bool(context.profile.get("fixture")),
+            require_widths=bool(context.case.get("vmp_recovery_required", True)),
+        )
         if not checks["ok"]:
             raise StageBlocked(context.question(
                 self.id, "IDA dispatch table is incomplete or ambiguous",

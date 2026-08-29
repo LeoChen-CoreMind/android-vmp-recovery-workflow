@@ -32,10 +32,23 @@ class VmStatic(BasePlugin):
         summaries = context.case.get("vmp_inventory", [])
         if not any(isinstance(item.get("method_records"), int) and item["method_records"] > 0
                    for item in summaries if isinstance(item, dict)):
-            raise StageBlocked(context.question(
-                self.id,
-                "No recoverable VMP method records were found; SO/IDA validation may complete, but VM recovery requires a matching runtime DEX",
-                [json.dumps(summaries, ensure_ascii=False)], ["dex_dir", "dex_zip"]))
+            output = context.revision_dir("ida/tables") / "vm_static_skipped.json"
+            payload = {
+                "status": "skipped",
+                "reason": "no-vmp-method-records",
+                "methods": 0,
+                "vmp_inventory": summaries,
+            }
+            output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            context.case.setdefault("artifacts", {})["vm_static_report"] = str(output.resolve())
+            context.save_case()
+            return {
+                "ok": True,
+                "source": "not-required",
+                "skipped": True,
+                "methods": 0,
+                "artifacts": [file_record(output, context.case_dir)],
+            }
         command = context.profile.get("commands", {}).get("vm-static") or context.case.get("commands", {}).get("vm-static")
         if not command:
             raise StageBlocked(context.question(self.id, "Static VM command is not configured", [], ["commands.vm-static"]))

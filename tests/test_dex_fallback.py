@@ -1,7 +1,5 @@
-import pytest
-
-from vmpwf.core import StageBlocked
 from vmpwf.engine import init_case, load_context, run_workflow
+from vmpwf.plugins.dex_restore import DexRestore
 from vmpwf.plugins.vm_static import VmStatic
 
 
@@ -25,6 +23,14 @@ def test_zero_vmp_records_do_not_block_device_setup_or_so_stages(tmp_path, sampl
     assert result["vmp_recovery_required"] is False
     assert result["vmp_method_records"] == 0
 
-    with pytest.raises(StageBlocked) as blocked:
-        VmStatic().run(load_context(case_dir))
-    assert blocked.value.question["stage"] == "vm-static"
+    skipped = VmStatic().run(load_context(case_dir))
+    assert skipped["ok"] is True
+    assert skipped["skipped"] is True
+    assert skipped["methods"] == 0
+
+    restored = DexRestore().run(load_context(case_dir))
+    assert restored["ok"] is True
+    assert restored["repair_required"] is False
+    assert restored["vmp_repaired"] is False
+    assert restored["restored_methods"] == 0
+    assert len([item for item in restored["artifacts"] if item["path"].endswith(".dex")]) == 2

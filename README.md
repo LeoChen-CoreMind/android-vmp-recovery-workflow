@@ -12,7 +12,7 @@ APK ingest -> DEX static extraction/user fallback -> target confirmation
 
 The bundled static extractor is an unchanged compatibility script. User/runtime DEX input remains classified as unrepaired until a real customer-specific IDA/simulation/restore chain proves otherwise.
 
-A valid DEX set with zero VMP method records does not block target confirmation, SO dump/repair, or IDA capability validation. The workflow records that inventory and pauses at `vm-static`, where method streams are actually required.
+A valid DEX set with zero VMP method records does not block target confirmation, SO dump/repair, IDA table export, or dispatcher-level Unicorn validation. The workflow records a pass-through DEX report with `vmp_repaired=false`; method-stream recovery is marked not required for that case.
 
 The first device profile is ARM64-only. It rejects a 32-bit target before loading the ARM64 Frida or Unicorn components. SO layout offsets, IDA root/helper RVAs, and native simulation addresses are case configuration, never reusable defaults.
 

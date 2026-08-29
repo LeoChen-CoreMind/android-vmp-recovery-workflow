@@ -14,6 +14,45 @@ class NativeSim(BasePlugin):
 
     def run(self, context):
         streams_path = context.case.get("artifacts", {}).get("vm_streams")
+        if not context.profile.get("fixture") and not context.case.get("vmp_recovery_required", True):
+            configured = context.case.get("simulation", {}).get("dispatch_confirmation")
+            confirmation = Path(configured) if configured else None
+            if not confirmation or not confirmation.is_file():
+                raise StageBlocked(context.question(
+                    self.id,
+                    "Dispatcher-level native confirmation is required when no VMP methods are present",
+                    [str(confirmation) if confirmation else "missing: simulation.dispatch_confirmation"],
+                    ["simulation"],
+                ))
+            payload = json.loads(confirmation.read_text(encoding="utf-8"))
+            ida_result = context.case.get("stage_records", {}).get("ida-export", {}).get("result", {})
+            invalid = payload.get("invalid_memory", [])
+            if (
+                payload.get("confirmed") is not True
+                or payload.get("scope") != "dispatch-table"
+                or payload.get("request_count") != 256
+                or payload.get("matched_count") != 256
+                or payload.get("mismatches")
+                or invalid
+                or payload.get("unknown_external_calls", 0) != 0
+            ):
+                raise StageBlocked(context.question(
+                    self.id, "Dispatcher native confirmation did not pass", [str(confirmation)]
+                ))
+            if payload.get("binary_sha256") != ida_result.get("binary_sha256"):
+                raise StageBlocked(context.question(
+                    self.id, "Dispatcher confirmation belongs to a different SO", [str(confirmation)]
+                ))
+            output = context.revision_dir("simulation/results") / "native_simulation.json"
+            output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            context.case.setdefault("artifacts", {})["simulation"] = str(output.resolve())
+            context.save_case()
+            return {
+                "ok": True,
+                "source": "unicorn-dispatch-confirmation",
+                **payload,
+                "artifacts": [file_record(output, context.case_dir, source_evidence=str(confirmation.resolve()))],
+            }
         if context.profile.get("fixture"):
             fixture_name = context.profile.get("simulation", {}).get("fixture")
             fixture = Path(fixture_name) if fixture_name else None

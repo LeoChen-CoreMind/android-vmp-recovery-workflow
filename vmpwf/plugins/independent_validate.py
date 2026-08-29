@@ -25,9 +25,10 @@ class IndependentValidate(BasePlugin):
             raise StageBlocked(context.question(self.id, "No DEX outputs are available for validation", []))
         restore_result = context.case.get("stage_records", {}).get("dex-restore", {}).get("result", {})
         fixture = bool(context.profile.get("fixture"))
+        vmp_required = bool(context.case.get("vmp_recovery_required", True))
         tool_results = []
         if not fixture:
-            if not restore_result.get("vmp_repaired"):
+            if vmp_required and not restore_result.get("vmp_repaired"):
                 raise StageBlocked(context.question(self.id, "DEX restoration was not proven", ["dex-restore"]))
             configured_tools = {**context.profile.get("tools", {}), **context.case.get("tools", {})}
             java = resolve_tool("java", configured_tools.get("java"))
@@ -51,9 +52,14 @@ class IndependentValidate(BasePlugin):
         report = {"status": "ok", "files": files, "tools": {
             "java": resolve_tool("java"), "jadx": resolve_tool("jadx"),
             "dexdump": resolve_tool("dexdump"), "codex": resolve_tool("codex")},
+            "vmp_repair_required": vmp_required,
             "vmp_repair_claimed": bool(restore_result.get("vmp_repaired")),
             "fixture_pass_through": fixture,
-            "validation_scope": "orchestration-only" if fixture else "restored-dex",
+            "validation_scope": (
+                "orchestration-only" if fixture
+                else "restored-dex" if vmp_required
+                else "dispatcher-only-no-vmp-methods"
+            ),
             "tool_results": tool_results}
         output = context.revision_dir("reports") / "validation.json"
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

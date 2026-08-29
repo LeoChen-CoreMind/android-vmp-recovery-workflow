@@ -61,7 +61,11 @@ def lm_summary(path: Path) -> dict:
             "method_records": record_count, "opcode_table_size": table_size}
 
 
-def validate_dispatch_map(payload: dict[str, Any], allow_contextual: bool = False) -> dict[str, Any]:
+def validate_dispatch_map(
+    payload: dict[str, Any],
+    allow_contextual: bool = False,
+    require_widths: bool = True,
+) -> dict[str, Any]:
     entries = payload.get("entries")
     if not isinstance(entries, list):
         return {"ok": False, "error": "entries is not a list"}
@@ -76,8 +80,9 @@ def validate_dispatch_map(payload: dict[str, Any], allow_contextual: bool = Fals
         # The reference fixture has two context-dependent handlers. This exception
         # is fixture-only and is never accepted as customer evidence.
         ambiguous = [value for value in ambiguous if value not in (14, 46)]
-    return {"ok": len(entries) == 256 and not missing and not duplicates
-            and not invalid_handlers and not ambiguous,
+    dispatch_ok = len(entries) == 256 and not missing and not duplicates and not invalid_handlers
+    return {"ok": dispatch_ok and (not require_widths or not ambiguous),
+            "dispatch_ok": dispatch_ok, "widths_required": require_widths,
             "entry_count": len(entries), "missing_opcodes": missing,
             "duplicate_opcodes": duplicates, "invalid_handlers": invalid_handlers,
             "ambiguous_widths": ambiguous}

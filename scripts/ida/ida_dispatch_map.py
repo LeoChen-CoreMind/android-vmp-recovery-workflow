@@ -1,7 +1,18 @@
 import json
 import os
 import re
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from vmpwf.ida_patterns import (  # noqa: E402
+    canonical_register,
+    is_cmp_dispatch_pattern,
+    is_direct_dispatch_pattern,
+)
 
 import ida_bytes
 import ida_funcs
@@ -29,6 +40,7 @@ if REQUEST.get("root_rva") is None or missing:
 
 LOAD_BASE = number(REQUEST.get("image_base", 0))
 IMAGE_SIZE = number(ANALYSIS["image_size"])
+POINTER_BASE = number(ANALYSIS.get("pointer_base", LOAD_BASE))
 ROOT = number(REQUEST["root_rva"])
 OUTPUT = Path(REQUEST["output"])
 UNIT_DECODERS = {number(value) for value in ANALYSIS["unit_decoders"]}
@@ -40,8 +52,8 @@ HANDLER_WIDTH_OVERRIDES = {
 
 
 def normalize_pointer(value):
-    if LOAD_BASE <= value < LOAD_BASE + IMAGE_SIZE:
-        return value - LOAD_BASE
+    if POINTER_BASE <= value < POINTER_BASE + IMAGE_SIZE:
+        return value - POINTER_BASE
     if 0 <= value < IMAGE_SIZE:
         return value
     return None
@@ -76,22 +88,20 @@ def decode_dispatch_node(ea, opcode):
     mnemonic = idc.print_insn_mnem(ea).upper()
     if mnemonic == "CMP" and idc.print_operand(ea, 0).upper() in ("W0", "X0"):
         immediate = idc.get_operand_value(ea, 1)
-        condition = None
-        table = None
-        cursor = ea
-        saw_branch = False
-        for _ in range(16):
-            current = idc.print_insn_mnem(cursor).upper()
-            if current == "CSET":
-                condition = idc.print_operand(cursor, 1)
-            refs = data_refs(cursor)
-            if refs:
-                table = refs[-1]
-            if current == "BR":
-                saw_branch = True
-                break
-            cursor = next_head(cursor)
-        if condition is None or table is None or not saw_branch:
+        adrp = next_head(ea)
+        cset = next_head(adrp)
+        add = next_head(cset)
+        load = next_head(add)
+        branch = next_head(load)
+        if not is_cmp_dispatch_pattern(
+                [idc.print_insn_mnem(item) for item in (adrp, cset, add, load, branch)],
+                idc.print_operand(load, 0),
+                idc.print_operand(branch, 0)):
+            return None, {"kind": "unparsed_cmp", "ea": ea}
+        condition = idc.print_operand(cset, 1)
+        refs = data_refs(add) or data_refs(adrp)
+        table = refs[-1] if refs else None
+        if table is None:
             return None, {"kind": "unparsed_cmp", "ea": ea}
         test = condition_true(condition, opcode, immediate)
         if test is None:
@@ -111,8 +121,10 @@ def decode_dispatch_node(ea, opcode):
     if mnemonic == "ADRP":
         first = next_head(ea)
         second = next_head(first)
-        if (idc.print_insn_mnem(first).upper() == "LDR" and
-                idc.print_insn_mnem(second).upper() == "BR"):
+        if is_direct_dispatch_pattern(
+                [mnemonic, idc.print_insn_mnem(first), idc.print_insn_mnem(second)],
+                idc.print_operand(first, 0),
+                idc.print_operand(second, 0)):
             refs = data_refs(first)
             if not refs:
                 return None, {"kind": "unparsed_direct", "ea": ea}
@@ -144,11 +156,6 @@ def resolve_opcode(opcode):
             return raw, "non_code_pointer", path
         current = nxt
     return current, "too_deep", path
-
-
-def canonical_register(operand):
-    match = re.fullmatch(r"[WX](\d+)", operand.upper())
-    return f"X{match.group(1)}" if match else None
 
 
 def memory_operand(operand):

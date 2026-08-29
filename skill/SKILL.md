@@ -24,7 +24,7 @@ Required invariants:
 - Device execution uses the profile-owned, hash-verified `media-server`; redeploy it after reboot and use spawn-gating only.
 - Reject a target ABI that is outside the selected profile before starting Frida or Unicorn.
 - Fixture mode validates orchestration only and preserves fixture provenance.
-- Real final validation requires restored-method coverage plus successful dexdump and JADX checks.
+- Real final validation requires restored-method coverage plus successful dexdump and JADX checks when VMP method records exist. Cases with zero method records may be accepted at dispatcher/SO scope with explicit `vmp_repaired=false` provenance.
 - Fail closed on ambiguous dump points, IDA widths, opcodes, references, simulator calls, code-unit lengths, or DEX integrity.
 - Answer recoverable failures with `vmpwf resume`; it reloads at the stage boundary, invalidates downstream stages, and continues automatically.
 - Preserve old artifacts and SHA-256 records. Do not modify the bundled static extractor while operating a case.
