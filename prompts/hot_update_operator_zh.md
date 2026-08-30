@@ -30,7 +30,7 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 2. 确认问题 ID 仍为 `open`，记录 blocked stage、message、evidence、expected fields 和当前 `config_revision`。
 3. 打开问题引用的证据文件，复现或验证失败。不能只根据问题 message 生成答案。
 4. 判断新信息解决的是当前阶段，还是证明更早阶段的产物无效。`invalidate_from` 必须选择最早真正受影响的阶段，不能为了少重跑而选择过晚阶段，也不能无依据扩大重跑范围。
-5. 只使用框架允许的 answer 字段：`commands`、`ida`、`simulation`、`artifacts`、`profile`、`device_serial`、`dex_inputs`、`dex_dir`、`dex_zip`、`apk`、`tools`、`command_timeout`、`target_confirmed`、`execute_device`、`so_dump_config`、`invalidate_from`。
+5. 只使用框架允许的 answer 字段：`commands`、`ida`、`simulation`、`artifacts`、`profile`、`device_serial`、`dex_inputs`、`dex_dir`、`dex_zip`、`apk`、`tools`、`command_timeout`、`target_confirmed`、`execute_device`、`so_dump_config`、`apk_repack`、`invalidate_from`。
 6. 在案件 `answers/` 下创建最小 answer JSON。答案只能包含已由作者提供或由本地证据唯一确定的值。
 7. 执行：
    `py -3 .\vmpwf.py resume --case <case-dir> --question <q-id> --answer <answer.json>`
@@ -49,6 +49,7 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 - Unicorn PLT、重定位、内存映射或原生结果错误：`native-sim`。
 - DEX 回写、class_data 长度或 repair manifest 错误：`dex-restore`。
 - dexdump/JADX/哈希验收配置错误：`independent-validate`。
+- 当前版本去壳 adapter、Manifest/DEX 映射、精确删除项、bridge、签名或设备验收错误：`apk-unpack-repack`。
 
 必须向作者提问的情况：
 

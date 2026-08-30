@@ -18,7 +18,7 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 我授权你在本机范围内使用该框架、ADB、su、Frida、SoFixer、IDA Pro MCP、Unicorn、Java、dexdump 和 JADX，并读写本案件目录。所有分析、产物和日志必须保存在本地，不要上传客户 APK、DEX、SO 或案件证据到外部服务。
 
 总目标：
-客户 APK -> DEX 静态提取 -> 必要时导入用户 DEX -> ADB 确认目标 -> 私有 linker/SO dump -> SO 修复 -> IDA Pro MCP 提取当前 SO 的 dispatcher/handler 表 -> Unicorn 对同一个 SO 做原生二次确认 -> 有真实 VMP method records 时恢复 DEX VMP -> dexdump/JADX/哈希独立验证。
+客户 APK -> DEX 静态提取 -> 必要时导入用户 DEX -> ADB 确认目标 -> 私有 linker/SO dump -> SO 修复 -> IDA Pro MCP 提取当前 SO 的 dispatcher/handler 表 -> Unicorn 对同一个 SO 做原生二次确认 -> 有真实 VMP method records 时恢复 DEX VMP -> dexdump/JADX/哈希独立验证 -> 按当前 360 版本独立适配去壳特征并重打包、签名、设备验收。
 
 执行规则：
 
@@ -38,6 +38,8 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 14. DEX 声称修复成功前，必须有修复 manifest、恢复方法覆盖、合法 DEX checksum，并通过 dexdump 和 Java-backed JADX。JADX 的部分反编译错误不能被静默忽略，必须记录真实退出码和日志；也不能把原始/传递 DEX 写成已修复。
 15. 所有原始证据只追加，不覆盖。配置更新只在阶段边界生效；需要恢复时用 `vmpwf resume`，不要手工修改 checkpoint。
 16. 案件进入 `BLOCKED`、作者提供新参数或框架补丁完成后，先读取 `prompts/hot_update_operator_zh.md`，再按热更新契约生成 answer JSON 和执行 resume。
+17. `independent-validate` 完成后，真实 profile 必须继续执行最后阶段 `apk-unpack-repack`。先读取 `prompts/apk-unpack-repack.md` 和 `prompts/360-repack-version-adapter-zh.md`，为当前 APK/revision 独立生成 adapter；不得复用其他版本的 Application、DEX 布局、删除列表、bridge、调用次数或补丁常量。
+18. 重打包完成至少要求：精确删除项已移除、最终 DEX 映射及哈希匹配、Manifest Application/Factory 匹配、ZIP 无重复条目、dexdump/JADX/zipalign/apksigner 真实通过，以及 adapter 要求时的设备安装与冷启动验收。业务盗版/签名检测与 360 壳残留必须分开归因。
 
 证据原则：
 
@@ -73,6 +75,7 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 - SO、IDA 表、模拟结果、DEX 输入/输出的 SHA-256。
 - 是否真的恢复了 VMP 方法及恢复数量。
 - dexdump/JADX 是否实际通过。
+- 去 360 特征 adapter、重打包 APK、签名和设备验收是否实际通过。
 - 框架是否被修改、测试结果和 Git commit（仅在我要求提交时）。
 
 现在开始执行。除非遇到上述必须由作者决定的问题，否则持续推进到当前案件可达到的最高证据级别。

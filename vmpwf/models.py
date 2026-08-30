@@ -3,6 +3,7 @@ from __future__ import annotations
 STAGES = [
     "apk-ingest", "dex-extract", "target-confirm", "so-dump", "so-repair",
     "ida-export", "vm-static", "native-sim", "dex-restore", "independent-validate",
+    "apk-unpack-repack",
 ]
 
 STAGE_SUCCESS = {
@@ -16,6 +17,7 @@ STAGE_SUCCESS = {
     "native-sim": "SIMULATION_CONFIRMED",
     "dex-restore": "DEX_RESTORED",
     "independent-validate": "VALIDATED",
+    "apk-unpack-repack": "VALIDATED",
 }
 
 STATES = ["INIT", *STAGE_SUCCESS.values(), "BLOCKED"]
@@ -26,4 +28,5 @@ CASE_DIRS = [
     "dump/dex/records", "dump/so/raw", "dump/so/metadata", "fix/so",
     "fix/dex", "ida/requests", "ida/responses", "ida/tables",
     "simulation/inputs", "simulation/results", "reports", "logs",
+    "repack/adapter", "repack/output", "logs/repack",
 ]

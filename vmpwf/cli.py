@@ -37,12 +37,14 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--device"); init.add_argument("--dex", action="append", default=[])
     init.add_argument("--dex-dir"); init.add_argument("--dex-zip"); init.add_argument("--apk", type=Path, required=True)
     init.add_argument("--profile", default="android-arm64-360-dexvmp")
+    init.add_argument("--apk-repack-adapter", type=Path)
     recover = sub.add_parser("recover")
     recover.add_argument("--apk", type=Path, required=True); recover.add_argument("--dex-dir")
     recover.add_argument("--dex-zip"); recover.add_argument("--device")
     recover.add_argument("--profile", default="android-arm64-360-dexvmp")
     recover.add_argument("--case-root", type=Path, default=REPO_ROOT / "cases")
     recover.add_argument("--execute-device", action="store_true")
+    recover.add_argument("--apk-repack-adapter", type=Path)
     for name in ("status", "inspect", "plan", "validate"):
         command = sub.add_parser(name); command.add_argument("--case", type=Path, required=True)
     run = sub.add_parser("run"); run.add_argument("--case", type=Path, required=True)
@@ -63,9 +65,14 @@ def doctor() -> dict:
         REPO_ROOT / "tools/frida/manifest.json",
         REPO_ROOT / "scripts/ida/build_mcp_response.py",
         REPO_ROOT / "scripts/simulation/run_native_confirmation.py",
+        REPO_ROOT / "vmpwf/plugins/apk_unpack_repack.py",
+        REPO_ROOT / "schemas/apk-repack-adapter.schema.json",
+        REPO_ROOT / "prompts/apk-unpack-repack.md",
+        REPO_ROOT / "prompts/360-repack-version-adapter-zh.md",
     ]
     tools = {name: resolve_tool(name) for name in
-             ("adb", "frida", "java", "jadx", "dexdump", "codex", "git", "gh")}
+             ("adb", "frida", "java", "jadx", "dexdump", "aapt2", "apksigner", "zipalign",
+              "apktool", "codex", "git", "gh")}
     modules = {name: importlib.util.find_spec(name) is not None
                for name in ("frida", "unicorn", "capstone", "jsonschema")}
     return {"status": "ok" if all(path.is_file() for path in required) else "error",
@@ -87,14 +94,21 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "init":
             apk = args.apk.resolve(); package = args.package or inspect_package(apk)
+            repack = {}
+            if args.apk_repack_adapter:
+                repack = {"enabled": True, "adapter": str(args.apk_repack_adapter.resolve())}
             case = init_case(args.case.resolve(), package, args.device, args.dex, str(apk), args.profile,
-                             args.dex_dir, args.dex_zip)
+                             args.dex_dir, args.dex_zip, repack)
             print(json.dumps(case, ensure_ascii=False, indent=2)); return 0
         if args.command == "recover":
             apk = args.apk.resolve(); package = inspect_package(apk)
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             case_dir = args.case_root.resolve() / package / f"{package}-{stamp}"
-            init_case(case_dir, package, args.device, [], str(apk), args.profile, args.dex_dir, args.dex_zip)
+            repack = {}
+            if args.apk_repack_adapter:
+                repack = {"enabled": True, "adapter": str(args.apk_repack_adapter.resolve())}
+            init_case(case_dir, package, args.device, [], str(apk), args.profile,
+                      args.dex_dir, args.dex_zip, repack)
             result = run_workflow(load_context(case_dir, args.execute_device))
             print(json.dumps({"case": str(case_dir), **_summary(result)}, ensure_ascii=False, indent=2)); return 0
         if args.command in ("status", "inspect"):

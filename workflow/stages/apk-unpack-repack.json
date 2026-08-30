@@ -1,0 +1,7 @@
+{
+  "id": "apk-unpack-repack",
+  "plugin": "ApkUnpackRepack",
+  "inputs": ["customer_apk", "restored_dex", "validation_report", "version_adapter"],
+  "outputs": ["repacked_apk", "repack_manifest", "repack_validation_logs"],
+  "gate": "final real-profile stage; require a current-revision version adapter with hash-bound APK/DEX inputs, exact shell removals, explicit manifest and bridge evidence, signed APK output, and independent structural/tool validation; fixture scope is not applicable"
+}

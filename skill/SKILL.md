@@ -1,6 +1,6 @@
 ---
 name: android-vmp-recovery-workflow
-description: Run a resumable Android 360 DexVMP case from customer APK and optional runtime DEX through SO dump/repair, IDA evidence export, native confirmation, VMP restoration, and independent validation.
+description: Run a resumable Android 360 DexVMP case through SO/DEX recovery, validation, version-specific 360 shell-feature removal, and signed APK repacking.
 metadata:
   short-description: Operate the APK-to-DexVMP recovery workflow
 ---
@@ -14,6 +14,8 @@ vmpwf recover --apk <apk> [--dex-dir <dir> | --dex-zip <zip>] --profile <profile
 ```
 
 Read [references/prompts/master_operator.md](references/prompts/master_operator.md) for autonomous operation and the matching stage prompt under `references/prompts/` before resolving a blocked stage.
+
+After independent DEX validation, read [references/prompts/apk-unpack-repack.md](references/prompts/apk-unpack-repack.md) and [references/prompts/360-repack-version-adapter-zh.md](references/prompts/360-repack-version-adapter-zh.md), then execute the final repack stage for real 360 cases.
 
 Required invariants:
 
@@ -29,3 +31,4 @@ Required invariants:
 - Answer recoverable failures with `vmpwf resume`; it reloads at the stage boundary, invalidates downstream stages, and continues automatically.
 - Preserve old artifacts and SHA-256 records. Do not modify the bundled static extractor while operating a case.
 - Never call the removed `dump_libjiagu.js`; the runtime SO entrypoint is `run_gating.py` plus `dump_linker.js`.
+- APK repacking is the final real-profile stage and is version-specific. Never reuse another APK's Application, DEX layout, shell-entry list, descriptor bridge, call counts, or no-op semantics; require a current-revision adapter and independent APK validation. Fixture cases remain not applicable.

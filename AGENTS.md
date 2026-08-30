@@ -19,6 +19,7 @@ Operate only on targets and files supplied by the user. Keep customer APK, DEX, 
 - For a new or continuing end-to-end case, read `prompts/local_autonomous_operator_zh.md`.
 - For an open `BLOCKED` question, a corrected parameter, or recovery after a framework patch, also read `prompts/hot_update_operator_zh.md`.
 - Stage-specific prompts in `prompts/` define additional gates. Read the matching prompt before diagnosing or changing that stage.
+- After `independent-validate`, real 360 cases must read `prompts/apk-unpack-repack.md` and `prompts/360-repack-version-adapter-zh.md` and execute the version-specific final repack stage.
 - `README.md` contains user-facing launch templates. Keep it synchronized when prompt paths or workflow behavior change.
 
 The prompts and `skills/android-vmp-workflow-hot-update/` are repository-local resources. Do not install them globally unless the user explicitly asks.
@@ -50,6 +51,15 @@ Before operating a case or changing framework behavior:
 - A DEX is not VMP-restored unless the restore stage records actual restored methods and independent validation proves the output.
 - If all DEX inputs have `method_records=0`, record that no VMP methods are recoverable. Continue SO/dispatcher validation, but never claim `vmp_repaired=true`.
 - Stop at the highest evidence level the case supports and clearly distinguish passed, skipped/not-applicable, and blocked stages.
+- The real 360 profile ends with `apk-unpack-repack`. Each APK revision needs its own adapter; fixture or another 360 version is never repack evidence.
+
+## APK Repack Rules
+
+- Never change APK entries from family keywords or filename patterns. The adapter must distinguish exact entries that disappear from exact same-path replacements and bind replacement outputs to SHA-256.
+- Bind every source and output DEX to SHA-256 and declare the final `classes*.dex` layout explicitly.
+- Restore Application/AppComponentFactory only from current-case evidence. Descriptor or bridge changes require encoded-length, string-order, callsite-count, return-value, and control-flow evidence.
+- Keep business piracy/signature checks and unrelated crashes separate from shell-removal conclusions unless the user explicitly scopes and current-version evidence proves those changes.
+- Require no duplicate ZIP entries plus successful aapt2, dexdump, JADX, zipalign, and apksigner validation. Run device acceptance when the adapter requires it.
 
 ## Device And SO Rules
 

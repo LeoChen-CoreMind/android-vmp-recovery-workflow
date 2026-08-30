@@ -2,6 +2,7 @@
   "id": "offline-fixture",
   "fixture": true,
   "architecture": "AArch64",
+  "apk_repack": {"enabled": false},
   "static_extract_timeout": 60,
   "ida": {
     "adapter": "fixture",

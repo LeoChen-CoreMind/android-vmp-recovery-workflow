@@ -13,7 +13,8 @@ from .plugins import PLUGINS
 
 def init_case(case_dir: Path, package: str, device: str | None, dex: list[str],
               apk: str | None, profile: str, dex_dir: str | None = None,
-              dex_zip: str | None = None) -> dict[str, Any]:
+              dex_zip: str | None = None,
+              apk_repack: dict[str, Any] | None = None) -> dict[str, Any]:
     create_case_layout(case_dir)
     case_id = case_dir.name
     case = {
@@ -24,6 +25,7 @@ def init_case(case_dir: Path, package: str, device: str | None, dex: list[str],
         "apk": str(Path(apk).resolve()) if apk else None, "profile": profile,
         "config_revision": 1, "state": "INIT", "stage_records": {},
         "commands": {}, "ida": {}, "simulation": {}, "tools": {}, "artifacts": {},
+        "apk_repack": apk_repack or {},
     }
     atomic_json(case_dir / "case.json", case)
     atomic_json(case_dir / "questions.json", [])
@@ -120,7 +122,7 @@ def resume_case(context: Context, question_id: str, answer_path: Path) -> dict[s
         raise ValueError("answer must be a JSON object")
     allowed = {"commands", "ida", "simulation", "artifacts", "profile", "device_serial", "dex_inputs",
                "dex_dir", "dex_zip", "apk", "tools", "command_timeout", "target_confirmed",
-               "execute_device", "so_dump_config", "invalidate_from"}
+               "execute_device", "so_dump_config", "apk_repack", "invalidate_from"}
     unknown = sorted(set(answer) - allowed)
     if unknown:
         raise ValueError(f"answer contains immutable or unknown fields: {unknown}")

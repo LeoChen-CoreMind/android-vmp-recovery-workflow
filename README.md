@@ -10,6 +10,7 @@ Repository automation rules are defined in `AGENTS.md`. Codex or another coding 
 APK ingest -> DEX static extraction/user fallback -> target confirmation
 -> SO dump -> SO repair -> IDA JSON export -> static VM recovery
 -> native simulation -> DEX restore -> independent validation
+-> version-specific 360 feature removal -> signed APK repack validation
 ```
 
 The bundled static extractor is an unchanged compatibility script. User/runtime DEX input remains classified as unrepaired until a real customer-specific IDA/simulation/restore chain proves otherwise.
@@ -23,6 +24,8 @@ Native confirmation is implemented by `scripts/simulation/run_native_confirmatio
 Runtime SO recovery has one supported entrypoint: `scripts/dump/so/run_gating.py` loads `scripts/dump/so/dump_linker.js` with case-specific offsets. A simple post-`dlopen` dump of the outer `libjiagu` mapping is not accepted as the private linker because it lacks the private `soinfo` evidence, synthetic ELF reconstruction, and decrypted dynamic-table overlay required by later IDA analysis.
 
 The reproducible Frida startup and anti-detection boundary is documented in [docs/frida-spawn-gating-anti-debug-zh.md](docs/frida-spawn-gating-anti-debug-zh.md). It covers the hash-pinned renamed server, reboot redeployment, spawn-gating lifecycle, empty spawn-identifier handling, pre-`JNI_OnLoad` timing, evidence logs, and the known crash risk of inline-hooking manually mapped private code.
+
+The real 360 profile finishes with `apk-unpack-repack`. The operator reads `prompts/apk-unpack-repack.md` and `prompts/360-repack-version-adapter-zh.md`, builds a current-revision adapter, then executes and validates the signed APK. The adapter is deliberately per-version: another APK may inform the algorithm, but its Application class, DEX numbering, shell entries, bridge methods, call counts, descriptor substitutions, or signing behavior are never accepted as current evidence.
 
 ## Local AI Operator Prompt
 
@@ -94,7 +97,7 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
 
 ## Case layout
 
-Cases are created under `cases/<package>/<case-id>/` with `input`, `dump/so`, `dump/dex`, `fix/so`, `fix/dex`, `ida`, `simulation`, `reports`, and `logs` directories. `case.json`, `checkpoint.json`, `questions.json`, `events.jsonl`, and `artifacts.json` hold state and provenance.
+Cases are created under `cases/<package>/<case-id>/` with `input`, `dump/so`, `dump/dex`, `fix/so`, `fix/dex`, `ida`, `simulation`, `repack/adapter`, `repack/output`, `reports`, and `logs` directories. `case.json`, `checkpoint.json`, `questions.json`, `events.jsonl`, and `artifacts.json` hold state and provenance.
 
 ## Commands
 
@@ -104,7 +107,7 @@ py -3 .\vmpwf.py doctor
 py -3 .\vmpwf.py recover `
   --apk "C:\path\target.apk" `
   --dex-zip "C:\path\runtime-dex.zip" `
-  --profile offline-fixture
+  --profile android-arm64-360-dexvmp
 
 py -3 .\vmpwf.py run --case .\cases\com.example.app\<case-id> --execute-device
 py -3 .\vmpwf.py status --case <case-dir>
@@ -114,7 +117,7 @@ py -3 .\vmpwf.py resume --case <case-dir> --question q-0001 --answer answer.json
 py -3 .\vmpwf.py install-global
 ```
 
-`offline-fixture` validates orchestration and file contracts. Its reference IDA/VM evidence is explicitly not customer semantics. The normal `android-arm64-360-dexvmp` profile requires real device commands, customer-specific IDA output, and a real restoration result.
+`offline-fixture` validates orchestration and file contracts. Its reference IDA/VM evidence is explicitly not customer semantics and its repack stage is not applicable. The normal `android-arm64-360-dexvmp` profile requires real device commands, customer-specific IDA output, a real restoration result, and a current-version APK repack adapter. If the adapter is not supplied initially, the final stage writes an inventory/template and opens a structured question for the AI operator to resolve.
 
 `resume` applies the answer, increments `config_revision`, archives invalidated stage records, and immediately continues from the first affected checkpoint. `artifacts.json` is append-only across revisions.
 

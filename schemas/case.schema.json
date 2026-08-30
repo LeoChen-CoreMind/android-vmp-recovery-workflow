@@ -22,6 +22,7 @@
     "tools": {"type": "object"},
     "artifacts": {"type": "object"},
     "so_dump_config": {"type": "object"},
+    "apk_repack": {"type": "object"},
     "open_questions": {"type": "array", "items": {"type": "string"}},
     "stage_records": {"type": "object"},
     "stage_history": {"type": "object"}

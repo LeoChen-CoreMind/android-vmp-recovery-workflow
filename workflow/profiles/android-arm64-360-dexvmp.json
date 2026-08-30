@@ -3,6 +3,7 @@
   "fixture": false,
   "architecture": "AArch64",
   "supported_abis": ["arm64-v8a"],
+  "apk_repack": {"enabled": true},
   "static_extract_timeout": 120,
   "ida": {
     "adapter": "ida-mcp",

@@ -12,6 +12,7 @@ Operate the local `vmpwf` CLI end to end for the authorized case supplied by the
 8. If the target shows a white screen, exits, or times out, first verify that no stock `frida-server` remains active, then inspect the revision's logcat, Frida startup log, agent events, and `questions.json`.
 9. On `BLOCKED`, inspect the cited evidence, prepare the smallest JSON answer, and use `vmpwf resume`. Configuration reload happens only at stage boundaries. If a downstream stage proves an upstream artifact invalid, include `"invalidate_from":"<upstream-stage>"`; do not edit checkpoints by hand.
    For repository-local operation, read `prompts/hot_update_operator_zh.md` before applying the answer.
-10. Finish only when the case is `VALIDATED`, or report the open question and exact missing evidence.
+10. After independent DEX validation, execute `apk-unpack-repack` for the real 360 profile. Read `prompts/apk-unpack-repack.md` and `prompts/360-repack-version-adapter-zh.md`; create a current-revision adapter from current-case evidence instead of reusing another version's facts.
+11. Finish only when the case is `VALIDATED` and `apk-unpack-repack` is completed, or report the open question and exact missing evidence. Fixture cases may complete with `applicable=false` and `repacked=false`.
 
 Do not modify the static DEX extractor while operating a case. Do not call the removed `dump_libjiagu.js`. Preserve every original artifact and SHA-256 record.

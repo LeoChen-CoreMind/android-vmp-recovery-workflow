@@ -42,6 +42,9 @@
     "config": null
   },
   "commands": {},
+  "apk_repack": {
+    "adapter": "C:/cases/repack/adapter/current-version.json"
+  },
   "artifacts": {},
   "stage_records": {}
 }

@@ -36,3 +36,5 @@ def test_workflow_and_stage_definitions_match_schemas():
     validate(root / "schemas/workflow.schema.json", load(root / "workflow/workflow.json"))
     for path in (root / "workflow/stages").glob("*.json"):
         validate(root / "schemas/stage.schema.json", load(path))
+    assert "apk-unpack-repack" in load(root / "workflow/workflow.json")["stages"]
+    assert load(root / "workflow/dependencies.json")["apk-unpack-repack"] == ["independent-validate"]

@@ -28,10 +28,11 @@ def android_sdk_roots() -> list[Path]:
 
 
 def find_android_build_tool(name: str) -> str | None:
-    executable = f"{name}.exe" if os.name == "nt" else name
+    executables = [name] if os.name != "nt" else [f"{name}.exe", f"{name}.bat", f"{name}.cmd"]
     matches: list[Path] = []
     for sdk_root in android_sdk_roots():
-        matches.extend(path for path in (sdk_root / "build-tools").glob(f"*/{executable}") if path.is_file())
+        for executable in executables:
+            matches.extend(path for path in (sdk_root / "build-tools").glob(f"*/{executable}") if path.is_file())
     if not matches:
         return None
     return str(max(matches, key=_version_key).resolve())
@@ -48,6 +49,6 @@ def resolve_tool(name: str, configured: str | None = None) -> str | None:
     resolved = shutil.which(name)
     if resolved:
         return resolved
-    if name == "dexdump":
+    if name in {"aapt2", "apksigner", "dexdump", "zipalign"}:
         return find_android_build_tool(name)
     return None

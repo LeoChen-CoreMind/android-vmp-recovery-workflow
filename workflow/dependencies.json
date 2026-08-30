@@ -8,5 +8,6 @@
   "vm-static": ["ida-export", "dex-extract"],
   "native-sim": ["vm-static"],
   "dex-restore": ["native-sim"],
-  "independent-validate": ["dex-restore"]
+  "independent-validate": ["dex-restore"],
+  "apk-unpack-repack": ["independent-validate"]
 }
