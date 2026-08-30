@@ -1,6 +1,6 @@
 {
   "id": "android-vmp-recovery",
-  "version": 2,
+  "version": 3,
   "stages": [
     "apk-ingest",
     "dex-extract",

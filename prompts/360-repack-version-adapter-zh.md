@@ -2,6 +2,8 @@
 
 此提示词专门用于 `apk-unpack-repack` 阶段。每个 APK、每次壳升级、每个案件 revision 都必须重新探测并生成独立 adapter。历史 APK、旧版 360、2024 工具、旧案件、fixture 和本次成功样本只能提供算法思路，不能提供当前案件事实。
 
+首次适配前必须阅读 `docs/360-apk-repack-sanitized-case-study-zh.md` 和 `examples/apk-repack/sanitized-360-version-adapter.example.json`。案例演示代码形状，不提供当前案件参数。
+
 ```text
 你现在负责 Android 360 壳特征移除和无壳 APK 重打包的版本专门适配。
 
@@ -28,11 +30,12 @@ C:\Users\Rabe\Desktop\360\vmp-recovery-workflow
    - 每个输入 DEX 的路径/SHA-256、最终 classes*.dex 映射和输出 SHA-256；
    - 最终必须消失的精确 `remove_entries`，以及同路径替换的精确 `replace_entries` 和输出 SHA-256；壳 classes.dex 被业务主 DEX 占用同一路径时必须记为替换，不能误记为最终删除；不允许通配符、目录猜测或关键词批量处理；
    - descriptor 替换、编码长度、出现次数、字符串表排序证明；
-   - 每个 bridge/Stub 调用的 owner、方法签名、调用点数量、替代策略和语义证据；
+   - 每个 bridge/Stub 调用的 owner、方法签名、调用点数量、替代策略和语义证据；需要正则修改 smali 时还要声明目标文件 glob、完整正则、replacement、精确 `expected_matches` 和 dry-run 报告；
    - 签名证书 SHA-256、要求的签名 scheme、启动组件和设备验收窗口。
 5. 不得复用其他版本的 Application 类名、DEX 数量、classes 编号、删除/替换列表、descriptor、bridge 类、调用次数、空操作结论、签名校验位置或补丁常量。即使字节或名称相同，也要重新记录当前 APK 的哈希和证据。
 6. 只有在调用点控制流和返回值使用方式证明安全时，才能把壳接口替换为 Application Context、空操作或 bridge。存在多个可行候选、返回值被使用、异常路径不明确或 native 行为未确认时必须 BLOCKED。
 7. Manifest 必须结构化恢复；不要直接对二进制 AndroidManifest.xml 做未经证明的字符串替换。DEX 变更必须保持合法 header/checksum/signature，并通过 dexdump。
+   仓库参考工具为 `scripts/apk/patch_smali_calls.py` 和 `scripts/apk/repack_from_adapter.py`。前者只处理已反汇编 smali 并在命中数冲突时写入前失败；后者处理精确壳文件移除、完整 DEX 布局、Manifest、构建、对齐和签名。
 8. 重打包必须清理旧签名、构建、zipalign、使用明确证书签名，并用 aapt2、dexdump、JADX、zipalign、apksigner 独立验收。JADX 非零退出必须记录并 BLOCKED，不能静默当作成功。
 9. adapter 要求设备验收时，必须使用案件匹配设备，记录安装、冷启动、进程、窗口、logcat、ANR/native crash 和观察窗口。不得仅以“能安装”或“出现首屏”声称完整可运行。
 10. 应用自身的盗版提示、业务证书校验、接口鉴权或 native crash 与 360 壳残留分开归因。没有原包对照和当前代码证据时，不得自动移除或宣称属于壳。

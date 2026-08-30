@@ -35,7 +35,7 @@ def adapter_payload(case_dir: Path, apk: Path, dex: Path) -> dict:
         }],
         "remove_entries": ["assets/libjiagu.so"],
         "replace_entries": [],
-        "bridge_contracts": {"descriptor_replacements": [], "calls": []},
+        "bridge_contracts": {"descriptor_replacements": [], "calls": [], "smali_patches": []},
         "executor": {"command": ["missing-test-executor"], "output_apk": "test.apk"},
         "signing": {"certificate_sha256": "0" * 64, "required_schemes": ["v2"]},
         "validation": {"manifest": True, "dexdump": True, "jadx": True,
@@ -104,6 +104,17 @@ def test_adapter_schema_supports_same_path_shell_dex_replacement(tmp_path, sampl
         "name": "classes.dex", "output_sha256": sha256_file(dex),
         "evidence": ["shell primary DEX replaced by restored business primary DEX"],
     }]
+    root = Path(__file__).resolve().parents[1]
+    schema = json.loads((root / "schemas/apk-repack-adapter.schema.json").read_text(encoding="utf-8"))
+    assert not list(Draft202012Validator(schema).iter_errors(payload))
+
+
+def test_adapter_schema_keeps_smali_patches_optional(tmp_path, sample_inputs):
+    apk, _ = sample_inputs
+    dex = tmp_path / "classes.dex"
+    dex.write_bytes(b"dex\n035\0" + b"\0" * 128)
+    payload = adapter_payload(tmp_path, apk, dex)
+    payload["bridge_contracts"].pop("smali_patches")
     root = Path(__file__).resolve().parents[1]
     schema = json.loads((root / "schemas/apk-repack-adapter.schema.json").read_text(encoding="utf-8"))
     assert not list(Draft202012Validator(schema).iter_errors(payload))

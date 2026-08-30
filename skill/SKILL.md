@@ -17,6 +17,8 @@ Read [references/prompts/master_operator.md](references/prompts/master_operator.
 
 After independent DEX validation, read [references/prompts/apk-unpack-repack.md](references/prompts/apk-unpack-repack.md) and [references/prompts/360-repack-version-adapter-zh.md](references/prompts/360-repack-version-adapter-zh.md), then execute the final repack stage for real 360 cases.
 
+Before creating a first adapter or changing StubApp instruction handling, read [references/case-studies/sanitized-360-repack.md](references/case-studies/sanitized-360-repack.md). It contains the scoped smali regex, exact SO/asset removal, Manifest restoration, DEX bridge, and reference executor example.
+
 Required invariants:
 
 - Customer/runtime DEX files are unrepaired inputs until `dex-restore` and independent validation prove otherwise.

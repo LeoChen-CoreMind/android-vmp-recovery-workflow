@@ -108,6 +108,28 @@
               "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
             }
           }
+        },
+        "smali_patches": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "files", "pattern", "replacement", "expected_matches", "evidence"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "files": {
+                "type": "array", "minItems": 1, "uniqueItems": true,
+                "items": {"type": "string", "minLength": 1, "pattern": "^[^\\\\]+$"}
+              },
+              "pattern": {"type": "string", "minLength": 1},
+              "replacement": {"type": "string"},
+              "expected_matches": {"type": "integer", "minimum": 1},
+              "flags": {
+                "type": "array", "uniqueItems": true,
+                "items": {"enum": ["MULTILINE", "DOTALL"]}
+              },
+              "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+            }
+          }
         }
       }
     },

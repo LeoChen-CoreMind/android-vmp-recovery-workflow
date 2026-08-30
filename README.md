@@ -27,6 +27,8 @@ The reproducible Frida startup and anti-detection boundary is documented in [doc
 
 The real 360 profile finishes with `apk-unpack-repack`. The operator reads `prompts/apk-unpack-repack.md` and `prompts/360-repack-version-adapter-zh.md`, builds a current-revision adapter, then executes and validates the signed APK. The adapter is deliberately per-version: another APK may inform the algorithm, but its Application class, DEX numbering, shell entries, bridge methods, call counts, descriptor substitutions, or signing behavior are never accepted as current evidence.
 
+A concrete sanitized implementation example is documented in [docs/360-apk-repack-sanitized-case-study-zh.md](docs/360-apk-repack-sanitized-case-study-zh.md). Its companion adapter is `examples/apk-repack/sanitized-360-version-adapter.example.json`. `scripts/apk/patch_smali_calls.py` demonstrates exact-count scoped smali regex changes, while `scripts/apk/repack_from_adapter.py` demonstrates exact shell asset/SO removal, DEX injection, structured Manifest restoration, old-signature cleanup, apktool rebuild, alignment, and signing.
+
 ## Local AI Operator Prompt
 
 The repository-only Chinese prompt is stored at `prompts/local_autonomous_operator_zh.md`. It is not installed into the global Codex Skill. For a new task, replace the paths in the following short launcher and give it to the AI; the referenced prompt contains the complete evidence, blocking, and author-question rules.

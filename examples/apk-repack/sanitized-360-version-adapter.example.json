@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "adapter_id": "sanitized-360-version-example-do-not-execute",
+  "evidence_revision": 7,
+  "case_revision": 8,
+  "package": "com.example.target",
+  "apk_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "shell": {
+    "family": "360",
+    "version": "example-current-version-fingerprint",
+    "fingerprints": [
+      {
+        "kind": "zip-entry",
+        "value": "assets/libjiagu_a64.so",
+        "evidence": ["repack/adapter/rev-0007/apk_inventory.json#/zip_entries"]
+      },
+      {
+        "kind": "stub-call-owner",
+        "value": "Lcom/stub/StubApp;",
+        "evidence": ["reports/rev-0007/stub-call-inventory.json"]
+      }
+    ]
+  },
+  "manifest": {
+    "application": {
+      "value": "com.example.target.RealApplication",
+      "evidence": ["dump/dex/records/rev-0007/runtime-metadata.json#/application"]
+    },
+    "app_component_factory": {
+      "value": "android.app.AppComponentFactory",
+      "evidence": ["dump/dex/records/rev-0007/runtime-metadata.json#/appComponentFactory"]
+    }
+  },
+  "dex_layout": [
+    {
+      "source": "fix/dex/rev-0007/business-primary.dex",
+      "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "target": "classes.dex",
+      "output_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "evidence": ["fix/dex/rev-0007/vmp_restore_manifest.json"]
+    },
+    {
+      "source": "fix/dex/rev-0007/business-secondary.dex",
+      "source_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "target": "classes2.dex",
+      "output_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "evidence": ["fix/dex/rev-0007/vmp_restore_manifest.json"]
+    }
+  ],
+  "remove_entries": [
+    "assets/.jgapp",
+    "assets/libjiagu.so",
+    "assets/libjiagu_a64.so"
+  ],
+  "replace_entries": [
+    {
+      "name": "classes.dex",
+      "output_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "evidence": ["original shell primary DEX is replaced by the declared business primary DEX"]
+    }
+  ],
+  "bridge_contracts": {
+    "descriptor_replacements": [
+      {
+        "old": "Lcom/stub/StubApp;",
+        "new": "Lcom/ref/AppPatch;",
+        "same_length": true,
+        "expected_occurrences": 1,
+        "targets": ["classes.dex", "classes2.dex"],
+        "ordering_evidence": ["reports/rev-0007/dex-string-order-proof.json"]
+      }
+    ],
+    "calls": [
+      {
+        "owner": "Lcom/stub/StubApp;",
+        "name": "getOrigApplicationContext",
+        "descriptor": "(Landroid/content/Context;)Landroid/content/Context;",
+        "strategy": "application-context",
+        "callsite_count": 12,
+        "evidence": ["reports/rev-0007/stub-call-inventory.json#/context_wrappers"]
+      },
+      {
+        "owner": "Lcom/stub/StubApp;",
+        "name": "interface11|interface22|interface24|mark",
+        "descriptor": "(...)V",
+        "strategy": "no-op",
+        "callsite_count": 4,
+        "evidence": ["reports/rev-0007/stub-call-inventory.json#/void_markers"]
+      }
+    ],
+    "smali_patches": [
+      {
+        "id": "context-wrapper-to-framework-context",
+        "files": ["smali*/com/example/**/*.smali"],
+        "pattern": "^(?P<indent>[ \\t]*)invoke-static \\{(?P<register>[vp][0-9]+)\\}, Lcom/stub/StubApp;->getOrigApplicationContext\\(Landroid/content/Context;\\)Landroid/content/Context;[ \\t]*(?P<eol>\\r?)$",
+        "replacement": "\\g<indent>invoke-virtual {\\g<register>}, Landroid/content/Context;->getApplicationContext()Landroid/content/Context;\\g<eol>",
+        "expected_matches": 12,
+        "flags": ["MULTILINE"],
+        "evidence": ["all 12 callsites pass a Context register and consume the following move-result-object"]
+      },
+      {
+        "id": "confirmed-void-shell-markers-to-nop",
+        "files": ["smali*/com/example/**/*.smali"],
+        "pattern": "^(?P<indent>[ \\t]*)invoke-static(?:/range)? \\{[^}]*\\}, Lcom/stub/StubApp;->(?:interface11|interface22|interface24|mark)\\([^)]*\\)V[ \\t]*(?P<eol>\\r?)$",
+        "replacement": "\\g<indent>nop\\g<eol>",
+        "expected_matches": 4,
+        "flags": ["MULTILINE"],
+        "evidence": ["all four calls return void and each fall-through path was verified independently"]
+      }
+    ]
+  },
+  "executor": {
+    "command": [
+      "{python}",
+      "{repo}/scripts/apk/repack_from_adapter.py",
+      "--source-apk", "{source_apk}",
+      "--adapter", "{adapter}",
+      "--schema", "{repo}/schemas/apk-repack-adapter.schema.json",
+      "--output", "{output}",
+      "--work-dir", "{output_dir}/work",
+      "--report", "{output_dir}/reference-executor-report.json",
+      "--keystore", "{case}/secrets/local-repack.jks",
+      "--key-alias", "local-repack"
+    ],
+    "output_apk": "target-unpacked-signed.apk"
+  },
+  "signing": {
+    "certificate_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "required_schemes": ["v2", "v3"]
+  },
+  "validation": {
+    "manifest": true,
+    "dexdump": true,
+    "jadx": true,
+    "zipalign": true,
+    "signature": true,
+    "device": false
+  }
+}

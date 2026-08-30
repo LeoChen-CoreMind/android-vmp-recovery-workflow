@@ -13,6 +13,8 @@ import pytest
     "scripts/simulation/unicorn_literal_decoder.py",
     "scripts/simulation/unicorn_fetch_decoder_confirmation.py",
     "scripts/simulation/run_native_confirmation.py",
+    "scripts/apk/patch_smali_calls.py",
+    "scripts/apk/repack_from_adapter.py",
 ])
 def test_script_help_entrypoints(relative):
     root = Path(__file__).resolve().parents[1]

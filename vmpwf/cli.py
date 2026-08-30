@@ -69,6 +69,9 @@ def doctor() -> dict:
         REPO_ROOT / "schemas/apk-repack-adapter.schema.json",
         REPO_ROOT / "prompts/apk-unpack-repack.md",
         REPO_ROOT / "prompts/360-repack-version-adapter-zh.md",
+        REPO_ROOT / "scripts/apk/repack_from_adapter.py",
+        REPO_ROOT / "scripts/apk/patch_smali_calls.py",
+        REPO_ROOT / "examples/apk-repack/sanitized-360-version-adapter.example.json",
     ]
     tools = {name: resolve_tool(name) for name in
              ("adb", "frida", "java", "jadx", "dexdump", "aapt2", "apksigner", "zipalign",

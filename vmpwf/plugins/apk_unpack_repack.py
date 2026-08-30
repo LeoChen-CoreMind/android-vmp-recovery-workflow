@@ -19,7 +19,7 @@ from .common import BasePlugin
 
 class ApkUnpackRepack(BasePlugin):
     id = "apk-unpack-repack"
-    version = "1.0.0"
+    version = "1.1.0"
 
     @staticmethod
     def _resolve(case_dir: Path, value: str) -> Path:
@@ -176,6 +176,18 @@ class ApkUnpackRepack(BasePlugin):
             unknown_targets = sorted(set(replacement["targets"]) - set(targets))
             if unknown_targets:
                 conflicts.append(f"descriptor replacement references unmapped DEX targets: {unknown_targets}")
+        for patch in adapter["bridge_contracts"].get("smali_patches", []):
+            flags = 0
+            for name in patch.get("flags", []):
+                flags |= {"MULTILINE": re.MULTILINE, "DOTALL": re.DOTALL}[name]
+            try:
+                re.compile(patch["pattern"], flags)
+            except re.error as exc:
+                conflicts.append(f"invalid smali regex {patch['id']}: {exc}")
+            for pattern in patch["files"]:
+                candidate = Path(pattern)
+                if candidate.is_absolute() or ".." in candidate.parts or "\\" in pattern:
+                    conflicts.append(f"unsafe smali file glob in {patch['id']}: {pattern}")
         if conflicts:
             raise StageBlocked(context.question(
                 self.id, "APK repack adapter conflicts with current case evidence",
@@ -400,6 +412,7 @@ class ApkUnpackRepack(BasePlugin):
                 [str(output_apk), str(output_dir)], ["apk_repack.adapter"],
             ))
         values = {"case": str(context.case_dir), "adapter": str(adapter_path),
+                  "repo": str(context.repo_root), "python": str(__import__("sys").executable),
                   "source_apk": str(source_apk), "output": str(output_apk),
                   "output_dir": str(output_dir)}
         command = [str(item).format(**values) for item in adapter["executor"]["command"]]
