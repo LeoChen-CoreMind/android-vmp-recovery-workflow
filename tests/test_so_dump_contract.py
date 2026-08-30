@@ -79,6 +79,21 @@ def test_spawn_runner_resolves_empty_identifier_from_pending_spawn():
     assert module.resolve_spawn_identifier(Device(), Spawn(), attempts=1, delay=0) == "com.example.target"
 
 
+def test_spawn_runner_resumes_each_event_and_only_attaches_the_target():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts/dump/so/run_gating.py"
+    runner = script.read_text(encoding="utf-8")
+    assert "ensure_attached(pid)" in runner
+    assert "ensure_resumed(pid)" in runner
+    assert "resumed_pids" not in runner
+    assert "exec transitions that reuse a PID" in runner
+    assert 'if event["target"]:' in runner
+    assert "provisional_target" not in runner
+    assert "usap32" not in runner
+    assert "usap64" not in runner
+    assert "device.spawn(args.package)" not in runner
+
+
 def test_frida_spawn_gating_workflow_is_documented():
     root = Path(__file__).resolve().parents[1]
     document = root / "docs/frida-spawn-gating-anti-debug-zh.md"

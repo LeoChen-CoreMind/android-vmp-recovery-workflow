@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 
 from scripts.simulation.run_native_confirmation import collect_requests, confirm_requests
+import pytest
+
+from scripts.fix.dex.enrich_vm_streams import expected_invoke_register_words, mode1_unit
 from vmpwf.engine import init_case, load_context
 from vmpwf.plugins.native_sim import NativeSim
 from vmpwf.provenance import sha256_file
@@ -15,6 +18,38 @@ class FakeDecoder:
     def decode_unit(self, key, raw_unit):
         return {"decoded_unit": f"{self.values[(key, raw_unit)]:04x}",
                 "interpreter_entry_rva": "1234"}
+
+
+def test_mode1_static_decoder_applies_bytewise_truncation():
+    def reference_byte(raw_byte, key):
+        delta = (raw_byte - 58 - key) & 0xFF
+        mask = 0xB7 if delta & 0x40 else 0xB2
+        return key ^ (delta ^ mask)
+
+    keys = (0, 1, 0x3F, 0x80, 0xFF)
+    raw_bytes = (0, 1, 0x39, 0x3A, 0x7F, 0x80, 0xFE, 0xFF)
+    for key in keys:
+        for low in raw_bytes:
+            for high in raw_bytes:
+                expected = reference_byte(low, key) | (reference_byte(high, key) << 8)
+                assert mode1_unit(low | (high << 8), key) == expected
+
+
+@pytest.mark.parametrize(("kind", "parameters", "expected"), [
+    ("invoke-static", 0, 0),
+    ("invoke-static/range", 3, 3),
+    ("invoke-direct", 0, 1),
+    ("invoke-interface", 2, 3),
+    ("invoke-super", 1, 2),
+    ("invoke-virtual/range", 4, 5),
+])
+def test_invoke_register_words_require_exact_receiver_semantics(kind, parameters, expected):
+    assert expected_invoke_register_words(kind, parameters) == expected
+
+
+def test_invoke_register_words_reject_unknown_kind():
+    with pytest.raises(ValueError, match="unsupported invoke kind"):
+        expected_invoke_register_words("invoke-unknown", 1)
 
 
 def test_fixture_native_requests_are_batch_confirmable():
@@ -39,7 +74,20 @@ def test_plugin_uses_bundled_runner_when_simulation_paths_are_set(tmp_path, samp
     apk, _ = sample_inputs
     case_dir = tmp_path / "case"
     init_case(case_dir, "com.example.fixture", None, [], str(apk), "android-arm64-360-dexvmp")
-    streams = tmp_path / "streams.json"; streams.write_text("{}", encoding="utf-8")
+    streams = tmp_path / "streams.json"
+    streams.write_text(json.dumps({
+        "methods": [{
+            "method_idx": 7,
+            "instructions": [{
+                "pc": 3,
+                "literal_mode1_unicorn": {
+                    "engine": "pending-case-native-confirmation",
+                    "decoded_unit": "1234",
+                },
+            }],
+        }],
+        "literal_decoder": {"engine": "pending-case-native-confirmation"},
+    }), encoding="utf-8")
     paths = {}
     for name in ("outer", "linker", "binary", "config"):
         path = tmp_path / name
@@ -60,6 +108,11 @@ def test_plugin_uses_bundled_runner_when_simulation_paths_are_set(tmp_path, samp
             "streams_sha256": sha256_file(streams),
             "binary_sha256": sha256_file(Path(paths["binary"])),
             "config_sha256": sha256_file(Path(paths["config"])),
+            "request_count": 1,
+            "results": [{
+                "method_idx": 7, "pc": 3, "matched": True,
+                "actual_decoded_unit": 0x1234,
+            }],
         }
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report), encoding="utf-8")
@@ -69,3 +122,8 @@ def test_plugin_uses_bundled_runner_when_simulation_paths_are_set(tmp_path, samp
     result = NativeSim().run(context)
     assert result["confirmed"] is True
     assert Path(result["artifacts"][0]["path"]).is_file()
+    promoted = Path(result["confirmed_streams"])
+    promoted_payload = json.loads(promoted.read_text(encoding="utf-8"))
+    assert promoted_payload["literal_decoder"]["engine"] == "unicorn-arm64"
+    assert promoted_payload["literal_decoder"]["request_count"] == 1
+    assert promoted_payload["methods"][0]["instructions"][0]["literal_mode1_unicorn"]["matched"] is True

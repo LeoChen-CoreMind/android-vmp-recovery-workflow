@@ -118,7 +118,9 @@ py -3 .\vmpwf.py install-global
 
 `resume` applies the answer, increments `config_revision`, archives invalidated stage records, and immediately continues from the first affected checkpoint. `artifacts.json` is append-only across revisions.
 
-Real final validation fails closed unless Android SDK `dexdump` and Java-backed JADX accept every restored DEX. `doctor` resolves tools from `PATH` and automatically discovers the newest installed Android SDK Build Tools when `dexdump` is not on `PATH`. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
+Real final validation requires Android SDK `dexdump` to accept every restored DEX. Java-backed JADX must either complete in default mode or report exactly the same error count and method set as the source DEX, with no restored method in that set, while fallback mode completes successfully. `doctor` resolves tools from `PATH` and automatically discovers the newest installed Android SDK Build Tools when `dexdump` is not on `PATH`. Fixture validation reports `validation_scope=orchestration-only` and `vmp_repaired=false`.
+
+VM semantic maps fail closed on invoke receiver counts. An ART `InvokeType` selector is interpreted as `0=static`, `1=direct`, `2=virtual`, `3=super`, `4=interface`; static calls contain only prototype parameter words, while the other supported invoke kinds contain one additional receiver word.
 
 Repeatability requires identical customer inputs and restored DEX hashes. Runtime SO, IDA, and simulation intermediates are reported separately because ASLR-sensitive addresses and their bound hashes may vary between otherwise equivalent device launches.
 

@@ -8,7 +8,12 @@ import json
 from pathlib import Path
 
 from unicorn import UC_ARCH_ARM64, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_MODE_ARM, Uc
-from unicorn.arm64_const import UC_ARM64_REG_W0
+from unicorn.arm64_const import (
+    UC_ARM64_REG_SP,
+    UC_ARM64_REG_W0,
+    UC_ARM64_REG_X19,
+    UC_ARM64_REG_X29,
+)
 
 
 PAGE_SIZE = 0x1000
@@ -34,6 +39,10 @@ def dispatch_instruction_rvas(entries):
     addresses = set()
     for entry in entries:
         for detail in entry.get("path", []):
+            recorded = detail.get("instruction_rvas")
+            if isinstance(recorded, list) and all(isinstance(ea, int) for ea in recorded):
+                addresses.update(recorded)
+                continue
             ea = detail.get("ea")
             if not isinstance(ea, int):
                 continue
@@ -61,6 +70,10 @@ def confirm(binary: Path, dispatch: Path, pointer_base: int, instruction_limit: 
     emulator = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
     emulator.mem_map(mapped_base, mapped_size)
     emulator.mem_write(pointer_base, image)
+    scratch_base = align_up(mapped_base + mapped_size + PAGE_SIZE)
+    scratch_size = 0x20000
+    scratch_frame = scratch_base + scratch_size // 2
+    emulator.mem_map(scratch_base, scratch_size)
 
     results = []
     invalid_access = []
@@ -88,6 +101,9 @@ def confirm(binary: Path, dispatch: Path, pointer_base: int, instruction_limit: 
         current.update(opcode=opcode, handler=None, trace=[])
         current["dispatch_rvas"] = dispatch_instruction_rvas([entry])
         emulator.reg_write(UC_ARM64_REG_W0, opcode)
+        emulator.reg_write(UC_ARM64_REG_SP, scratch_frame)
+        emulator.reg_write(UC_ARM64_REG_X29, scratch_frame)
+        emulator.reg_write(UC_ARM64_REG_X19, scratch_frame)
         error = None
         try:
             emulator.emu_start(

@@ -9,9 +9,16 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from vmpwf.ida_patterns import (  # noqa: E402
+    MAX_DISPATCH_GAP,
     canonical_register,
+    decoder_max_unit_index,
+    exact_memory_register,
+    is_control_flow_mnemonic,
     is_cmp_dispatch_pattern,
+    is_dispatch_prefetch_address,
     is_direct_dispatch_pattern,
+    is_load_branch_tail,
+    select_width_evidence,
 )
 
 import ida_bytes
@@ -44,6 +51,19 @@ POINTER_BASE = number(ANALYSIS.get("pointer_base", LOAD_BASE))
 ROOT = number(REQUEST["root_rva"])
 OUTPUT = Path(REQUEST["output"])
 UNIT_DECODERS = {number(value) for value in ANALYSIS["unit_decoders"]}
+UNIT_DECODER_SPANS = {
+    number(key): number(value)
+    for key, value in ANALYSIS.get("unit_decoder_spans", {}).items()
+}
+if any(value <= 0 for value in UNIT_DECODER_SPANS.values()):
+    raise RuntimeError("unit_decoder_spans values must be positive")
+PC_POINTER_REGISTERS = {
+    canonical_register(value)
+    for value in ANALYSIS.get("pc_pointer_registers", ["X22"])
+}
+PC_POINTER_REGISTERS.discard(None)
+if not PC_POINTER_REGISTERS:
+    raise RuntimeError("pc_pointer_registers must contain at least one register")
 FORMAT_HELPERS = {number(value) for value in ANALYSIS["format_helpers"]}
 NORETURN_HELPERS = {number(value) for value in ANALYSIS["noreturn_helpers"]}
 HANDLER_WIDTH_OVERRIDES = {
@@ -84,6 +104,24 @@ def data_refs(ea):
     return [ref for ref in idautils.DataRefsFrom(ea) if 0 <= ref < IMAGE_SIZE]
 
 
+def dispatch_tail(load):
+    heads = [load]
+    destinations = []
+    current = load
+    for _ in range(MAX_DISPATCH_GAP + 1):
+        current = next_head(current)
+        if current == idc.BADADDR:
+            break
+        mnemonic = idc.print_insn_mnem(current).upper()
+        heads.append(current)
+        if mnemonic == "BR":
+            return heads, destinations
+        if is_control_flow_mnemonic(mnemonic):
+            break
+        destinations.append(idc.print_operand(current, 0))
+    return heads, destinations
+
+
 def decode_dispatch_node(ea, opcode):
     mnemonic = idc.print_insn_mnem(ea).upper()
     if mnemonic == "CMP" and idc.print_operand(ea, 0).upper() in ("W0", "X0"):
@@ -92,11 +130,13 @@ def decode_dispatch_node(ea, opcode):
         cset = next_head(adrp)
         add = next_head(cset)
         load = next_head(add)
-        branch = next_head(load)
+        tail, destinations = dispatch_tail(load)
+        branch = tail[-1]
         if not is_cmp_dispatch_pattern(
-                [idc.print_insn_mnem(item) for item in (adrp, cset, add, load, branch)],
+                [idc.print_insn_mnem(item) for item in (adrp, cset, add, *tail)],
                 idc.print_operand(load, 0),
-                idc.print_operand(branch, 0)):
+                idc.print_operand(branch, 0),
+                destinations):
             return None, {"kind": "unparsed_cmp", "ea": ea}
         condition = idc.print_operand(cset, 1)
         refs = data_refs(add) or data_refs(adrp)
@@ -111,6 +151,7 @@ def decode_dispatch_node(ea, opcode):
         return normalize_pointer(raw), {
             "kind": "cmp_table",
             "ea": ea,
+            "instruction_rvas": [ea, adrp, cset, add, *tail],
             "immediate": immediate,
             "condition": condition,
             "table": table,
@@ -120,18 +161,22 @@ def decode_dispatch_node(ea, opcode):
 
     if mnemonic == "ADRP":
         first = next_head(ea)
-        second = next_head(first)
+        tail, destinations = dispatch_tail(first)
+        branch = tail[-1]
         if is_direct_dispatch_pattern(
-                [mnemonic, idc.print_insn_mnem(first), idc.print_insn_mnem(second)],
+                [mnemonic, *[idc.print_insn_mnem(item) for item in tail]],
                 idc.print_operand(first, 0),
-                idc.print_operand(second, 0)):
+                idc.print_operand(branch, 0),
+                destinations):
             refs = data_refs(first)
             if not refs:
                 return None, {"kind": "unparsed_direct", "ea": ea}
             slot = refs[-1]
             raw = ida_bytes.get_qword(slot)
             return normalize_pointer(raw), {
-                "kind": "direct_slot", "ea": ea, "slot": slot, "raw": raw
+                "kind": "direct_slot", "ea": ea,
+                "instruction_rvas": [ea, *tail],
+                "slot": slot, "raw": raw
             }
 
     return None, {"kind": "leaf", "ea": ea}
@@ -204,20 +249,120 @@ def find_address_reference(register, heads, before):
     return None
 
 
-def infer_format_helper_width(target, constants):
-    if target in {0x7F4A4, 0x7F504}:
-        return 3
-    if target == 0x7FC78:
-        return 2
-    if target == 0x7F0D0 and "X0" in constants:
-        return 2 + (constants["X0"] & 1)
-    if target == 0x80034:
-        return 3
-    if target == 0x851E8 and "X1" in constants:
-        start_index = constants["X1"]
-        if 0 <= start_index <= 0x20:
-            return start_index + 2
-    return None
+def infer_format_helper_width(target, constants, helper_stack=()):
+    if target not in FORMAT_HELPERS or target in helper_stack:
+        return None
+    function = ida_funcs.get_func(target)
+    if function is None:
+        return None
+
+    blocks = list(ida_gdl.FlowChart(function, flags=ida_gdl.FC_PREDS))
+
+    def containing_block(address):
+        return next((
+            block for block in blocks
+            if block.start_ea <= address < block.end_ea
+        ), None)
+
+    initial = containing_block(target)
+    if initial is None:
+        return None
+
+    decoder_calls = []
+    nested_helpers = []
+    work = [(target, dict(constants), 0)]
+    seen = set()
+    processed = 0
+    while work and processed < 5000:
+        entry, inherited_constants, depth = work.pop()
+        processed += 1
+        block = containing_block(entry)
+        if block is None or depth > 64:
+            continue
+        state_key = (block.start_ea, entry, tuple(sorted(inherited_constants.items())))
+        if state_key in seen:
+            continue
+        seen.add(state_key)
+        current_constants = dict(inherited_constants)
+
+        for ea in idautils.Heads(entry, block.end_ea):
+            mnemonic = idc.print_insn_mnem(ea).upper()
+            op0_text = idc.print_operand(ea, 0).upper()
+            op1_text = idc.print_operand(ea, 1).upper()
+            destination = canonical_register(op0_text)
+
+            if mnemonic == "MOV" and destination:
+                source = canonical_register(op1_text)
+                if op1_text in ("WZR", "XZR"):
+                    current_constants[destination] = 0
+                elif idc.get_operand_type(ea, 1) == idc.o_imm:
+                    current_constants[destination] = idc.get_operand_value(ea, 1)
+                elif source in current_constants:
+                    current_constants[destination] = current_constants[source]
+                else:
+                    current_constants.pop(destination, None)
+                continue
+
+            if mnemonic in ("ADD", "SUB") and destination:
+                source = canonical_register(op1_text)
+                if source in current_constants and idc.get_operand_type(ea, 2) == idc.o_imm:
+                    immediate = idc.get_operand_value(ea, 2)
+                    if mnemonic == "SUB":
+                        immediate = -immediate
+                    current_constants[destination] = current_constants[source] + immediate
+                else:
+                    current_constants.pop(destination, None)
+                continue
+
+            if mnemonic == "BL":
+                call_target = idc.get_operand_value(ea, 0)
+                if call_target in UNIT_DECODERS and "X1" in current_constants:
+                    unit_index = current_constants["X1"]
+                    if 0 <= unit_index <= 0x20:
+                        unit_count = UNIT_DECODER_SPANS.get(call_target, 1)
+                        decoder_calls.append({
+                            "call": ea,
+                            "decoder": call_target,
+                            "unit_index": unit_index,
+                            "unit_count": unit_count,
+                            "max_unit_index": decoder_max_unit_index(
+                                unit_index, unit_count
+                            ),
+                        })
+                elif call_target in FORMAT_HELPERS:
+                    nested = infer_format_helper_width(
+                        call_target,
+                        current_constants,
+                        (*helper_stack, target),
+                    )
+                    if nested is not None:
+                        nested_helpers.append({
+                            "call": ea,
+                            "helper": call_target,
+                            **nested,
+                        })
+                for index in range(19):
+                    current_constants.pop(f"X{index}", None)
+                continue
+
+            if destination and mnemonic not in (
+                    "CMP", "CMN", "TST", "STR", "STRB", "STRH", "STP"):
+                current_constants.pop(destination, None)
+
+        for successor in block.succs():
+            work.append((successor.start_ea, current_constants, depth + 1))
+
+    max_indices = [call["max_unit_index"] for call in decoder_calls]
+    max_indices.extend(item["max_unit_index"] for item in nested_helpers)
+    if not max_indices:
+        return None
+    max_index = max(max_indices)
+    return {
+        "units": max_index + 1,
+        "max_unit_index": max_index,
+        "decoder_calls": decoder_calls,
+        "nested_helpers": nested_helpers,
+    }
 
 
 def resolve_indirect_successors(block, entry):
@@ -233,11 +378,18 @@ def resolve_indirect_successors(block, entry):
 
     load_ea = None
     load_operand = None
-    for ea in reversed(heads[:-1]):
-        if canonical_register(idc.print_operand(ea, 0)) != branch_register:
-            continue
+    candidate_heads = heads[max(0, len(heads) - MAX_DISPATCH_GAP - 2):-1]
+    for ea in reversed(candidate_heads):
         if idc.print_insn_mnem(ea).upper() != "LDR":
-            return [], None
+            continue
+        tail = heads[heads.index(ea):]
+        destinations = [idc.print_operand(item, 0) for item in tail[1:-1]]
+        if not is_load_branch_tail(
+                [idc.print_insn_mnem(item) for item in tail],
+                idc.print_operand(ea, 0),
+                idc.print_operand(branch_ea, 0),
+                destinations):
+            continue
         load_ea = ea
         load_operand = idc.print_operand(ea, 1)
         break
@@ -308,6 +460,13 @@ def infer_pc_width(handler):
     containing = containing_block(handler)
     if containing is None:
         return []
+    root_function = ida_funcs.get_func(ROOT)
+    root_function_start = root_function.start_ea if root_function is not None else ROOT
+    prefetch_function_starts = {root_function_start}
+    previous = idc.prev_head(ROOT, max(0, ROOT - 0x100))
+    previous_function = ida_funcs.get_func(previous)
+    if previous_function is not None and previous_function.end_ea == ROOT:
+        prefetch_function_starts.add(previous_function.start_ea)
 
     candidates = []
     decoder_calls = []
@@ -341,7 +500,8 @@ def infer_pc_width(handler):
             op1_text = idc.print_operand(ea, 1).upper()
             destination = canonical_register(op0_text)
 
-            if mnemonic == "LDR" and destination and memory_operand(op1_text) == "[X22]":
+            if (mnemonic == "LDR" and destination
+                    and exact_memory_register(op1_text) in PC_POINTER_REGISTERS):
                 current[destination] = (0, ea)
                 current_constants.pop(destination, None)
                 current_unit_sources.pop(destination, None)
@@ -413,7 +573,8 @@ def infer_pc_width(handler):
                     current_unit_sources.pop(destination, None)
                 continue
 
-            if mnemonic == "STR" and memory_operand(op1_text) == "[X22]":
+            if (mnemonic == "STR"
+                    and exact_memory_register(op1_text) in PC_POINTER_REGISTERS):
                 source = canonical_register(op0_text)
                 if source in current:
                     immediate, load_ea = current[source]
@@ -437,18 +598,23 @@ def infer_pc_width(handler):
                 if target in UNIT_DECODERS and "X1" in current_constants:
                     unit_index = current_constants["X1"]
                     if 0 <= unit_index <= 0x20:
+                        unit_count = UNIT_DECODER_SPANS.get(target, 1)
                         decoded_unit_index = unit_index
                         decoder_calls.append({
                             "call": ea,
                             "decoder": target,
                             "unit_index": unit_index,
+                            "unit_count": unit_count,
+                            "max_unit_index": decoder_max_unit_index(
+                                unit_index, unit_count
+                            ),
                         })
-                helper_width = infer_format_helper_width(target, current_constants)
-                if target in FORMAT_HELPERS and helper_width is not None:
+                helper_evidence = infer_format_helper_width(target, current_constants)
+                if helper_evidence is not None:
                     format_calls.append({
                         "call": ea,
                         "helper": target,
-                        "units": helper_width,
+                        **helper_evidence,
                     })
                 for index in range(19):
                     current.pop(f"X{index}", None)
@@ -481,6 +647,15 @@ def infer_pc_width(handler):
             successor = containing_block(successor_address)
             if successor is None:
                 continue
+            successor_function = ida_funcs.get_func(successor_address)
+            if (successor_function is not None
+                    and is_dispatch_prefetch_address(
+                        successor_address,
+                        ROOT,
+                        successor_function.start_ea,
+                        prefetch_function_starts,
+                    )):
+                continue
             work.append((
                 successor.start_ea,
                 successor_address,
@@ -496,35 +671,27 @@ def infer_pc_width(handler):
         pc_unique.setdefault(candidate["units"], candidate)
 
     format_candidates = {}
+    operand_widths = []
     if decoder_calls:
-        max_index = max(call["unit_index"] for call in decoder_calls)
-        units = max_index + 1
+        max_index = max(call["max_unit_index"] for call in decoder_calls)
+        operand_widths.append(max_index + 1)
+    for call in format_calls:
+        operand_widths.append(call["units"])
+    if operand_widths:
+        units = max(operand_widths)
         format_candidates[units] = {
             "bytes": units * 2,
             "units": units,
-            "source": "decoder_max_index",
-            "decoder_max_index": max_index,
-            "decoder_calls": decoder_calls,
+            "source": "operand_coverage",
         }
-    for call in format_calls:
-        units = call["units"]
-        candidate = format_candidates.setdefault(units, {
-            "bytes": units * 2,
-            "units": units,
-            "source": "format_helper",
-            "format_calls": [],
-        })
-        candidate.setdefault("format_calls", []).append(call)
-    if variable_pc_sources:
-        max_index = max(item["unit_index"] for item in variable_pc_sources)
-        units = max_index + 1
-        format_candidates.setdefault(units, {
-            "bytes": units * 2,
-            "units": units,
-            "source": "variable_pc_source",
-            "variable_pc_sources": variable_pc_sources,
-        })
-    if not format_candidates and terminal_returns:
+        if decoder_calls:
+            format_candidates[units]["decoder_max_index"] = max(
+                call["max_unit_index"] for call in decoder_calls
+            )
+            format_candidates[units]["decoder_calls"] = decoder_calls
+        if format_calls:
+            format_candidates[units]["format_calls"] = format_calls
+    if not format_candidates and not pc_unique and terminal_returns:
         format_candidates[1] = {
             "bytes": 2,
             "units": 1,
@@ -532,11 +699,10 @@ def infer_pc_width(handler):
             "terminal_returns": terminal_returns,
         }
 
-    unique = format_candidates if format_candidates else pc_unique
-    if format_candidates:
-        for units, candidate in unique.items():
-            if units in pc_unique:
-                candidate["matching_pc_write"] = pc_unique[units]
+    unique = select_width_evidence(pc_unique, format_candidates)
+    if variable_pc_sources:
+        for candidate in unique.values():
+            candidate["variable_pc_sources"] = variable_pc_sources
     if indirect_tables:
         for candidate in unique.values():
             candidate["indirect_tables"] = indirect_tables

@@ -11,6 +11,7 @@ import pytest
     "scripts/fix/dex/enrich_vm_streams.py",
     "scripts/fix/dex/restore_vmp_dex.py",
     "scripts/simulation/unicorn_literal_decoder.py",
+    "scripts/simulation/unicorn_fetch_decoder_confirmation.py",
     "scripts/simulation/run_native_confirmation.py",
 ])
 def test_script_help_entrypoints(relative):

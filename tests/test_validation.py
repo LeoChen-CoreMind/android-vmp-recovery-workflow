@@ -3,6 +3,7 @@ from pathlib import Path
 
 from vmpwf.validation import (lm_summary, valid_dex_bytes,
                               validate_dispatch_map, validate_vm_streams)
+from vmpwf.plugins.independent_validate import IndependentValidate
 
 from conftest import minimal_dex
 
@@ -32,3 +33,23 @@ def test_vm_stream_closure_rejects_bad_final_pc():
     result = validate_vm_streams(payload)
     assert not result["ok"]
     assert result["errors"][-1]["reason"] == "final-pc-not-closed"
+
+
+def test_jadx_error_contract_records_count_and_methods(tmp_path):
+    stdout = tmp_path / "jadx.stdout.log"
+    stderr = tmp_path / "jadx.stderr.log"
+    stdout.write_text(
+        "ERROR - 2 errors occurred in following nodes:\n"
+        "ERROR -   Method: a.b.C.first():void\n"
+        "ERROR -   Method: d.e.F.second(int):int\n"
+        "ERROR - finished with errors, count: 2\n",
+        encoding="utf-8",
+    )
+    stderr.write_text("", encoding="utf-8")
+    contract = IndependentValidate._jadx_error_contract({
+        "stdout_log": str(stdout), "stderr_log": str(stderr),
+    })
+    assert contract == {
+        "error_count": 2,
+        "error_methods": ["a.b.C.first():void", "d.e.F.second(int):int"],
+    }

@@ -14,6 +14,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from vmpwf.ida_patterns import (  # noqa: E402
+    MAX_DISPATCH_GAP,
+    is_control_flow_mnemonic,
     is_cmp_dispatch_pattern,
     is_direct_dispatch_pattern,
 )
@@ -75,6 +77,24 @@ def data_refs(ea):
     return [ref for ref in idautils.DataRefsFrom(ea) if 0 <= ref < image_size]
 
 
+def dispatch_tail(load):
+    heads = [load]
+    destinations = []
+    current = load
+    for _ in range(MAX_DISPATCH_GAP + 1):
+        current = next_head(current)
+        if current == idc.BADADDR:
+            break
+        mnemonic = idc.print_insn_mnem(current).upper()
+        heads.append(current)
+        if mnemonic == "BR":
+            return heads, destinations
+        if is_control_flow_mnemonic(mnemonic):
+            break
+        destinations.append(idc.print_operand(current, 0))
+    return heads, destinations
+
+
 def dispatch_step(ea, opcode):
     mnemonic = idc.print_insn_mnem(ea).upper()
     if mnemonic == "CMP" and idc.print_operand(ea, 0).upper() in ("W0", "X0"):
@@ -83,11 +103,13 @@ def dispatch_step(ea, opcode):
         cset = next_head(adrp)
         add = next_head(cset)
         load = next_head(add)
-        branch = next_head(load)
+        tail, destinations = dispatch_tail(load)
+        branch = tail[-1]
         if not is_cmp_dispatch_pattern(
-                [idc.print_insn_mnem(item) for item in (adrp, cset, add, load, branch)],
+                [idc.print_insn_mnem(item) for item in (adrp, cset, add, *tail)],
                 idc.print_operand(load, 0),
-                idc.print_operand(branch, 0)):
+                idc.print_operand(branch, 0),
+                destinations):
             return None, {"kind": "unparsed_cmp", "ea": ea}
         condition = idc.print_operand(cset, 1)
         refs = data_refs(add) or data_refs(adrp)
@@ -106,11 +128,13 @@ def dispatch_step(ea, opcode):
         }
     if mnemonic == "ADRP":
         first = next_head(ea)
-        second = next_head(first)
+        tail, destinations = dispatch_tail(first)
+        branch = tail[-1]
         if is_direct_dispatch_pattern(
-                [mnemonic, idc.print_insn_mnem(first), idc.print_insn_mnem(second)],
+                [mnemonic, *[idc.print_insn_mnem(item) for item in tail]],
                 idc.print_operand(first, 0),
-                idc.print_operand(second, 0)):
+                idc.print_operand(branch, 0),
+                destinations):
             refs = data_refs(first)
             if refs:
                 slot = refs[-1]

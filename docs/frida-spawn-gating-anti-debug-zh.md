@@ -37,16 +37,19 @@
 prepare/verify media-server
 -> device.enable_spawn_gating()
 -> force-stop target package
--> launch target package
--> receive spawn-added
--> attach spawned PID
--> create and load agent
--> resume spawned PID
+-> launch the package launcher activity
+-> receive target spawn-added
+-> attach and load the agent
+-> resume this spawn/exec event
 ```
 
 关键点是 agent 在 `resume()` 前完成加载。应用不会先运行到自己的 Java/JNI 反调试初始化，再被 Frida late attach。
 
 某些 Frida 17.9.1 `spawn-added` 事件最初会给出空 `identifier`。框架使用相同 PID 查询 `enumerate_pending_spawn()`，在有界重试内补全包标识；只有补全后的标识匹配目标包才 attach。每个事件都会写入 `spawn-events.json`，记录原始/解析标识、PID、是否命中目标、attach 和 resume 结果。
+
+spawn-gating 还会对同一 PID 的多次 `exec` 分别发出事件，例如 `su -> am`。这些事件必须逐次 `resume()`，不能仅按 PID 去重；只有 agent attach 会话按 PID 去重。
+
+Android USAP 会产生一种额外竞态：`spawn-added` 到达时 PID 仍标识为 `usap64`，resume 后才专化为目标包。真实设备实验表明，提前 attach 所有 `usap32/usap64` 候选会干扰非目标应用专化，并可能导致 ActivityManager 删除待启动进程；该方案已被拒绝，不能写成已验证的绕过。遇到这种系统状态时，应保留失败日志，使用可逆的系统级 USAP 诊断窗口验证标准 target-only gating，完成后恢复原设置。
 
 ### 3. 在目标 JNI 初始化前取证
 

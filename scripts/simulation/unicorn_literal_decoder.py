@@ -23,6 +23,11 @@ from unicorn.arm64_const import (
     UC_ARM64_REG_X2,
     UC_ARM64_REG_X3,
     UC_ARM64_REG_X4,
+    UC_ARM64_REG_X19,
+    UC_ARM64_REG_X20,
+    UC_ARM64_REG_X22,
+    UC_ARM64_REG_X26,
+    UC_ARM64_REG_X27,
 )
 
 
@@ -37,13 +42,17 @@ STACK_BASE = 0x40000000
 STACK_SIZE = 0x200000
 STOP_BASE = 0x50000000
 
-REQUIRED_CONFIG = {
+LEGACY_REQUIRED_CONFIG = {
     "interpreter_wrap_rva", "program_base_rva", "program_entry",
     "program_global_rva", "outer_rela_rva", "outer_rela_size",
     "relative_relocation_type", "dynstr_rva", "dynstr_size",
     "symtab_rva", "symtab_size", "symtab_entry_size",
     "plt_rela_rva", "plt_rela_size", "plt_stub_rva",
     "got_base_rva", "plt_stub_size", "got_slot_size",
+}
+
+MODE1_BLOCK_REQUIRED_CONFIG = {
+    "decoder_engine", "mode1_entry_rva", "mode1_index", "mode1_flag",
 }
 
 
@@ -53,12 +62,18 @@ def align_up(value, alignment=PAGE_SIZE):
 
 def load_config(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    missing = sorted(REQUIRED_CONFIG - set(payload))
+    engine = payload.get("decoder_engine", "outer-interpreter")
+    required = (MODE1_BLOCK_REQUIRED_CONFIG if engine == "fixed-so-mode1-block"
+                else LEGACY_REQUIRED_CONFIG)
+    missing = sorted(required - set(payload))
     if missing:
         raise ValueError("simulation config missing fields: " + ", ".join(missing))
     result = {}
     for key, value in payload.items():
-        result[key] = int(value, 0) if isinstance(value, str) else value
+        if key == "decoder_engine":
+            result[key] = value
+        else:
+            result[key] = int(value, 0) if isinstance(value, str) else value
     return result
 
 
@@ -69,7 +84,8 @@ class LiteralDecoder:
         self.config = load_config(config_path)
         self.trace_limit = trace_limit
         self.cs = Cs(CS_ARCH_ARM64, CS_MODE_LITTLE_ENDIAN)
-        self.plt_symbols = self._load_plt_symbols()
+        self.plt_symbols = ({} if self.config.get("decoder_engine") == "fixed-so-mode1-block"
+                            else self._load_plt_symbols())
         self.unit_cache = {}
 
     def _load_plt_symbols(self):
@@ -263,11 +279,98 @@ class LiteralDecoder:
             "trace_tail": trace,
         }
 
+    def _decode_mode1_unit(self, method_key, raw_unit):
+        uc = Uc(UC_ARCH_ARM64, UC_MODE_ARM)
+        self._map_image(uc, LINKER_BASE, self.linker)
+        uc.mem_map(HEAP_BASE, HEAP_SIZE)
+        uc.mem_map(STACK_BASE, STACK_SIZE)
+        uc.mem_map(STOP_BASE, PAGE_SIZE)
+
+        object_address = HEAP_BASE + 0x1000
+        stream_address = HEAP_BASE + 0x2000
+        tls_address = HEAP_BASE + 0x3000
+        stack_frame = STACK_BASE + STACK_SIZE - 0x200
+        canary = 0xC0DEC0DEC0DEC0DE
+
+        uc.mem_write(object_address, struct.pack("<Q", stream_address))
+        uc.mem_write(object_address + 8, bytes([method_key & 0xFF]))
+        stream_size = max((self.config["mode1_index"] + 1) * 2, 2)
+        stream = bytearray(stream_size)
+        struct.pack_into("<H", stream, self.config["mode1_index"] * 2,
+                         raw_unit & 0xFFFF)
+        uc.mem_write(stream_address, bytes(stream))
+        uc.mem_write(tls_address + 0x28, struct.pack("<Q", canary))
+        uc.mem_write(stack_frame + 0x78, struct.pack("<Q", canary))
+        uc.mem_write(stack_frame + 0xD8, struct.pack("<Q", STOP_BASE))
+
+        trace = []
+        invalid_access = []
+
+        def hook_code(emu, address, size, _):
+            if address == STOP_BASE:
+                emu.emu_stop()
+                return
+            if len(trace) >= self.trace_limit:
+                trace.pop(0)
+            raw = bytes(emu.mem_read(address, size))
+            insn = next(self.cs.disasm(raw, address), None)
+            trace.append(
+                f"0x{address:016x}: {insn.mnemonic} {insn.op_str}" if insn
+                else f"0x{address:016x}: {raw.hex()}"
+            )
+
+        def hook_invalid(_emu, access, address, size, value, _):
+            invalid_access.append({
+                "access": access, "address": address, "size": size, "value": value,
+            })
+            return False
+
+        uc.hook_add(UC_HOOK_CODE, hook_code)
+        uc.hook_add(UC_HOOK_MEM_INVALID, hook_invalid)
+        uc.reg_write(UC_ARM64_REG_CPACR_EL1, 3 << 20)
+        uc.reg_write(UC_ARM64_REG_SP, stack_frame)
+        uc.reg_write(UC_ARM64_REG_LR, STOP_BASE)
+        uc.reg_write(UC_ARM64_REG_X19, object_address)
+        uc.reg_write(UC_ARM64_REG_X20, self.config["mode1_index"])
+        uc.reg_write(UC_ARM64_REG_X22, self.config["mode1_flag"])
+        uc.reg_write(UC_ARM64_REG_X26, tls_address)
+        uc.reg_write(UC_ARM64_REG_X27, stream_address)
+
+        entry = LINKER_BASE + self.config["mode1_entry_rva"]
+        try:
+            uc.emu_start(entry, STOP_BASE + 4,
+                         count=self.config.get("max_instruction_count", 10000))
+        except UcError as exc:
+            raise RuntimeError(json.dumps({
+                "error": str(exc),
+                "pc": f"0x{uc.reg_read(UC_ARM64_REG_PC):x}",
+                "raw_unit": raw_unit & 0xFFFF,
+                "method_key": method_key & 0xFF,
+                "invalid_access": invalid_access,
+                "external_calls": [],
+                "trace_tail": trace,
+            }, ensure_ascii=False, indent=2)) from exc
+
+        return {
+            "engine": "unicorn-arm64",
+            "interpreter_entry_rva": f"{self.config['mode1_entry_rva']:x}",
+            "method_key": method_key & 0xFF,
+            "raw_unit": f"{raw_unit & 0xFFFF:04x}",
+            "decoded_unit": f"{uc.reg_read(UC_ARM64_REG_X0) & 0xFFFF:04x}",
+            "external_calls": [],
+            "invalid_access": invalid_access,
+            "trace_tail": trace,
+        }
+
     def decode_unit(self, method_key, raw_unit):
         cache_key = (method_key & 0xFF, raw_unit & 0xFFFF)
         cached = self.unit_cache.get(cache_key)
         if cached is not None:
             return dict(cached)
+        if self.config.get("decoder_engine") == "fixed-so-mode1-block":
+            result = self._decode_mode1_unit(method_key, raw_unit)
+            self.unit_cache[cache_key] = result
+            return dict(result)
         low = self.decode_byte(method_key, raw_unit & 0xFF)
         high = self.decode_byte(method_key, (raw_unit >> 8) & 0xFF)
         decoded = (method_key | (method_key << 8)) ^ (

@@ -4,13 +4,61 @@ import json
 import sys
 from pathlib import Path
 
-from ..core import StageBlocked, run_command
+from ..core import StageBlocked, atomic_json, run_command
 from ..provenance import file_record, sha256_file
 from .common import BasePlugin
 
 
 class NativeSim(BasePlugin):
     id = "native-sim"
+
+    def _promote_streams(self, context, streams_path: Path, report_path: Path,
+                         payload: dict) -> tuple[Path, dict]:
+        streams = json.loads(streams_path.read_text(encoding="utf-8"))
+        results = {
+            (item.get("method_idx"), item.get("pc")): item
+            for item in payload.get("results", [])
+        }
+        expected = 0
+        for method in streams.get("methods", []):
+            for instruction in method.get("instructions", []):
+                evidence = instruction.get("literal_mode1_unicorn")
+                if not isinstance(evidence, dict):
+                    continue
+                expected += 1
+                identity = (method.get("method_idx"), instruction.get("pc"))
+                result = results.get(identity)
+                if not result or result.get("matched") is not True:
+                    raise StageBlocked(context.question(
+                        self.id, "Native simulation did not cover every literal request",
+                        [str(report_path), json.dumps(identity)],
+                    ))
+                evidence.update({
+                    "engine": "unicorn-arm64",
+                    "actual_decoded_unit": f"{int(result['actual_decoded_unit']) & 0xFFFF:04x}",
+                    "matched": True,
+                })
+        if expected != payload.get("request_count") or len(results) != expected:
+            raise StageBlocked(context.question(
+                self.id, "Native simulation result coverage does not match VM streams",
+                [str(report_path), str(streams_path)],
+            ))
+
+        report_hash = sha256_file(report_path)
+        streams["literal_decoder"] = {
+            **streams.get("literal_decoder", {}),
+            "engine": "unicorn-arm64",
+            "request_count": expected,
+            "confirmed": True,
+            "confirmation_report": str(report_path.resolve()),
+            "confirmation_report_sha256": report_hash,
+            "source_streams_sha256": payload["streams_sha256"],
+            "binary_sha256": payload["binary_sha256"],
+            "config_sha256": payload["config_sha256"],
+        }
+        promoted = context.revision_dir("ida/tables") / "vm_streams_native_confirmed.json"
+        atomic_json(promoted, streams)
+        return promoted, streams
 
     def run(self, context):
         streams_path = context.case.get("artifacts", {}).get("vm_streams")
@@ -111,6 +159,15 @@ class NativeSim(BasePlugin):
             if (not isinstance(value, str) or len(value) != 64
                     or any(character not in "0123456789abcdefABCDEF" for character in value)):
                 raise StageBlocked(context.question(self.id, f"Native simulation result is missing {key}", [str(output)]))
-        context.case.setdefault("artifacts", {})["simulation"] = str(output.resolve()); context.save_case()
+        promoted, _ = self._promote_streams(context, Path(streams_path), output, payload)
+        artifacts = context.case.setdefault("artifacts", {})
+        artifacts["simulation"] = str(output.resolve())
+        artifacts["vm_streams"] = str(promoted.resolve())
+        context.save_case()
         return {"ok": True, "source": "command", "command": result, **payload,
-                "artifacts": [file_record(output, context.case_dir)]}
+                "confirmed_streams": str(promoted.resolve()),
+                "artifacts": [
+                    file_record(output, context.case_dir),
+                    file_record(promoted, context.case_dir,
+                                source_evidence=str(output.resolve())),
+                ]}

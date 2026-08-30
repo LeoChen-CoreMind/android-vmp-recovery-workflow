@@ -18,20 +18,11 @@ DEFAULT_RECOVERY = REPO_ROOT / "scripts" / "fix" / "dex" / "one_click_restore.py
 DEFAULT_STREAM_OUTPUT = ROOT / "vm_streams.json"
 
 
-def derive_selector(table_key, rx_byte):
-    """Replay sub_60BE4's W-register arithmetic and final STRB."""
-    value = rx_byte & 0xFF
-    for item in table_key[:8]:
-        value ^= item
-    value = (value + sum(table_key[8:16])) & 0xFFFFFFFF
-
-    mixed = 0
-    for item in table_key[:8]:
-        mixed ^= item | value
-    mixed ^= 0x36
-    for item in table_key:
-        mixed = ((mixed | item) + mixed) & 0xFFFFFFFF
-    return mixed & 0xFF
+def parse_u8(value):
+    parsed = int(value, 0)
+    if not 0 <= parsed <= 0xFF:
+        raise argparse.ArgumentTypeError("selector must be in range 0..255")
+    return parsed
 
 
 def sha256_file(path):
@@ -40,6 +31,22 @@ def sha256_file(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def load_selector_evidence(path, selector, binary_sha256):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("confirmed") is not True:
+        raise RuntimeError("selector evidence is not confirmed")
+    if payload.get("selector") != selector:
+        raise RuntimeError("selector evidence does not match --selector")
+    if payload.get("binary_sha256") != binary_sha256:
+        raise RuntimeError("selector evidence belongs to a different fixed SO")
+    if payload.get("method_key_formula") != "ins_size^class_idx^registers_size^name_idx^selector^0x2c":
+        raise RuntimeError("selector evidence has an unsupported method-key formula")
+    confirmations = payload.get("runtime_method_confirmations")
+    if not isinstance(confirmations, list) or len(confirmations) < 2:
+        raise RuntimeError("selector evidence needs at least two runtime method confirmations")
+    return payload
 
 
 def load_recovery(path):
@@ -153,6 +160,8 @@ def main():
     parser.add_argument("--outer", type=Path, required=True)
     parser.add_argument("--linker", type=Path, required=True)
     parser.add_argument("--sim-config", type=Path, required=True)
+    parser.add_argument("--selector", type=parse_u8, required=True)
+    parser.add_argument("--selector-evidence", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--stream-output", type=Path, required=True)
     parser.add_argument("--semantics-confirmed", action="store_true",
@@ -164,13 +173,14 @@ def main():
         args.outer.resolve(), args.linker.resolve(), args.sim_config.resolve()
     )
     widths, unresolved_widths = load_width_map(args.handler_map.resolve())
+    binary_sha256 = sha256_file(args.linker.resolve())
+    selector_evidence = load_selector_evidence(
+        args.selector_evidence.resolve(), args.selector, binary_sha256
+    )
     shell = args.shell.read_bytes()
     container = recovery.parse_qh_container(shell)
     table_key, seed_out = recovery.make_key(container["raw_config"], 222, 0)
-    selector_values = {derive_selector(table_key, rx_byte) for rx_byte in range(256)}
-    if len(selector_values) != 1:
-        raise RuntimeError(f"selector depends on unresolved rx byte: {sorted(selector_values)}")
-    config_selector = selector_values.pop()
+    config_selector = args.selector
 
     report = {
         "shell": str(args.shell.resolve()),
@@ -178,7 +188,10 @@ def main():
         "table_key": table_key.hex(),
         "seed_out": seed_out,
         "selector": config_selector,
-        "selector_rx_invariant": True,
+        "selector_source": "runtime-evidence",
+        "selector_evidence": str(args.selector_evidence.resolve()),
+        "selector_evidence_sha256": sha256_file(args.selector_evidence.resolve()),
+        "method_key_formula": selector_evidence["method_key_formula"],
         "dex_files": [],
     }
     for dex_path in sorted(args.dex_dir.glob("classes*.dex")):
@@ -289,7 +302,7 @@ def main():
     stream_report = {
         "evidence": {
             "semantics_confirmed": args.semantics_confirmed,
-            "binary_sha256": sha256_file(args.linker.resolve()),
+            "binary_sha256": binary_sha256,
             "dispatch_sha256": sha256_file(args.handler_map.resolve()),
             "simulation_config_sha256": sha256_file(args.sim_config.resolve()),
         },

@@ -161,6 +161,37 @@ def run_command(command: list[str], cwd: Path | None = None, timeout: int = 120,
         return {"command": command, "returncode": 126, "stdout": "", "stderr": str(exc)}
 
 
+def run_logged_command(command: list[str], stdout_path: Path, stderr_path: Path,
+                       cwd: Path | None = None, timeout: int = 120) -> dict[str, Any]:
+    actual = command
+    if os.name == "nt" and command and Path(command[0]).suffix.lower() in {".cmd", ".bat"}:
+        actual = [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c",
+                  subprocess.list2cmdline(command)]
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    stderr_path.parent.mkdir(parents=True, exist_ok=True)
+    returncode = 126
+    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        try:
+            completed = subprocess.run(actual, cwd=str(cwd) if cwd else None,
+                                       stdout=stdout, stderr=stderr, timeout=timeout)
+            returncode = completed.returncode
+        except FileNotFoundError as exc:
+            returncode = 127
+            stderr.write(str(exc).encode("utf-8", errors="replace"))
+        except subprocess.TimeoutExpired:
+            returncode = 124
+            stderr.write(b"timeout")
+        except OSError as exc:
+            stderr.write(str(exc).encode("utf-8", errors="replace"))
+    stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
+    stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace")
+    return {
+        "command": command, "returncode": returncode,
+        "stdout_log": str(stdout_path.resolve()), "stderr_log": str(stderr_path.resolve()),
+        "stdout": stdout_text[-20000:], "stderr": stderr_text[-20000:],
+    }
+
+
 def validate_files(source: dict[str, Any], keys: list[str]) -> dict[str, Any]:
     records = []
     missing = []
