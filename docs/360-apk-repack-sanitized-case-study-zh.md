@@ -1,4 +1,4 @@
-# 360 去特征与重打包脱敏案例
+# 某6零去特征与重打包脱敏案例
 
 此案例用于教 AI 如何把当前版本证据转成 adapter 和执行步骤。案例包名、哈希、数量和类名均为脱敏示例，不能作为任何真实 APK 的默认值。完整 JSON 位于 `examples/apk-repack/sanitized-360-version-adapter.example.json`。
 
